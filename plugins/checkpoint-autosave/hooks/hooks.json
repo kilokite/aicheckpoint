@@ -1,0 +1,32 @@
+{
+  "description": "Create a Checkpoint snapshot whenever Codex changes Git worktree content.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/checkpoint_after_edit.py\" --baseline",
+            "commandWindows": "python -c \"import os,runpy;runpy.run_path(os.path.join(os.environ['PLUGIN_ROOT'],'scripts','checkpoint_after_edit.py'),run_name='__main__')\" --baseline",
+            "timeout": 15,
+            "statusMessage": "Initializing Checkpoint autosave"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/checkpoint_after_edit.py\"",
+            "commandWindows": "python -c \"import os,runpy;runpy.run_path(os.path.join(os.environ['PLUGIN_ROOT'],'scripts','checkpoint_after_edit.py'),run_name='__main__')\"",
+            "timeout": 30,
+            "statusMessage": "Saving conversation snapshot"
+          }
+        ]
+      }
+    ]
+  }
+}

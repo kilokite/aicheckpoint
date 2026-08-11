@@ -13,6 +13,7 @@ class McpSnapshotServer {
     required GitSnapshotService git,
     required SnapshotStore store,
     this.onSnapshotsChanged,
+    this.listenPort = port,
   }) : _git = git,
        _store = store;
 
@@ -23,6 +24,9 @@ class McpSnapshotServer {
   final GitSnapshotService _git;
   final SnapshotStore _store;
   final SnapshotsChanged? onSnapshotsChanged;
+  final int listenPort;
+
+  String get serverUrl => 'http://127.0.0.1:$listenPort$endpoint';
 
   Server? _server;
   StreamableHttpServerTransport? _transport;
@@ -31,9 +35,9 @@ class McpSnapshotServer {
     if (_server != null) return;
 
     final transport = StreamableHttpServerTransport(
-      config: const StreamableHttpServerConfig(
+      config: StreamableHttpServerConfig(
         host: '127.0.0.1',
-        port: port,
+        port: listenPort,
         endpoint: endpoint,
         fallbackPorts: [],
         isJsonResponseEnabled: true,

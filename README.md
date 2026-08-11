@@ -68,3 +68,16 @@ http://127.0.0.1:47173/mcp
 
 MCP 不暴露删除、重命名、还原或修改快照的工具。服务仅绑定
 `127.0.0.1`，并启用本地 Origin 限制；Checkpoint 退出后服务随之关闭。
+
+## Codex 自动保存插件
+
+插件源码位于 `plugins/checkpoint-autosave`，并作为资源打包进 Windows 产物。
+桌面应用左侧的“安装 Codex 插件”提供两种方式：
+
+- 直接安装：将插件复制到当前用户的 personal marketplace，并在
+  `~/.codex/config.toml` 中启用 `checkpoint-autosave@personal`。
+- 让 Codex 安装：将完整插件源码导出到 Checkpoint 应用数据目录，并生成一段带绝对
+  路径的安装提示词。
+
+安装后需要重新启动 Codex，并在首次使用时确认 hook 权限。自动保存期间必须保持
+Checkpoint 桌面应用运行；目标机器还需要在 `PATH` 中提供 Git 和 Python。

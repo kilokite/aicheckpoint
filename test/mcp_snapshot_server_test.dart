@@ -13,6 +13,7 @@ void main() {
   late McpSnapshotServer server;
   late SnapshotStore store;
   late HttpClient client;
+  late String serverUrl;
 
   Future<String> runGit(List<String> arguments) async {
     final result = await Process.run(
@@ -28,7 +29,7 @@ void main() {
     Map<String, dynamic> body, {
     String? sessionId,
   }) async {
-    final request = await client.postUrl(Uri.parse(McpSnapshotServer.url));
+    final request = await client.postUrl(Uri.parse(serverUrl));
     request.headers.contentType = ContentType.json;
     request.headers.set('Accept', 'application/json, text/event-stream');
     request.headers.set('MCP-Protocol-Version', '2025-06-18');
@@ -64,7 +65,15 @@ void main() {
     store = SnapshotStore(
       directory: Directory(p.join(temporaryDirectory.path, 'data')),
     );
-    server = McpSnapshotServer(git: GitSnapshotService(), store: store);
+    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final testPort = socket.port;
+    await socket.close();
+    server = McpSnapshotServer(
+      git: GitSnapshotService(),
+      store: store,
+      listenPort: testPort,
+    );
+    serverUrl = server.serverUrl;
     client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
     await server.start();
   });

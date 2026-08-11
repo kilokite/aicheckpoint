@@ -1,0 +1,24 @@
+{
+  "name": "checkpoint-autosave",
+  "version": "0.1.0+codex.bundled-20260811",
+  "description": "Automatically saves one Checkpoint snapshot after each changed Codex conversation turn.",
+  "author": {
+    "name": "Checkpoint"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Checkpoint Autosave",
+    "shortDescription": "One snapshot per changed conversation.",
+    "longDescription": "Connects Codex to the local Checkpoint MCP server and creates one immutable snapshot when a completed conversation turn changed Git worktree content.",
+    "developerName": "Checkpoint",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP",
+      "Hooks"
+    ],
+    "defaultPrompt": [
+      "Show me how Checkpoint autosave protects this coding session."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

@@ -59,6 +59,14 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - plugins/checkpoint-autosave/.codex-plugin/plugin.json
+    - plugins/checkpoint-autosave/.mcp.json
+    - plugins/checkpoint-autosave/hooks/hooks.json
+    - plugins/checkpoint-autosave/scripts/checkpoint_after_edit.py
+    - plugins/checkpoint-autosave/scripts/test_checkpoint_after_edit.py
+    - plugins/checkpoint-autosave/skills/checkpoint-autosave/SKILL.md
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
