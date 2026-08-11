@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,14 +8,47 @@ import 'package:path_provider/path_provider.dart';
 import '../models/snapshot.dart';
 
 class SnapshotStore {
+  SnapshotStore({Directory? directory}) : _directory = directory;
+
+  final Directory? _directory;
+  Future<void> _pendingOperation = Future.value();
+
   Future<File> get _file async {
-    final support = await getApplicationSupportDirectory();
+    final support = _directory ?? await getApplicationSupportDirectory();
     final directory = Directory(p.join(support.path, 'Checkpoint'));
     await directory.create(recursive: true);
     return File(p.join(directory.path, 'snapshots.json'));
   }
 
-  Future<List<Snapshot>> load() async {
+  Future<List<Snapshot>> load() => _exclusive(_loadUnlocked);
+
+  Future<List<Snapshot>> add(Snapshot snapshot) => _exclusive(() async {
+    final snapshots = await _loadUnlocked();
+    snapshots.removeWhere((item) => item.id == snapshot.id);
+    snapshots.insert(0, snapshot);
+    await _saveUnlocked(snapshots);
+    return snapshots;
+  });
+
+  Future<List<Snapshot>> rename(String id, String title) =>
+      _exclusive(() async {
+        final snapshots = await _loadUnlocked();
+        final index = snapshots.indexWhere((item) => item.id == id);
+        if (index >= 0) {
+          snapshots[index] = snapshots[index].copyWith(title: title);
+        }
+        await _saveUnlocked(snapshots);
+        return snapshots;
+      });
+
+  Future<List<Snapshot>> remove(String id) => _exclusive(() async {
+    final snapshots = await _loadUnlocked();
+    snapshots.removeWhere((item) => item.id == id);
+    await _saveUnlocked(snapshots);
+    return snapshots;
+  });
+
+  Future<List<Snapshot>> _loadUnlocked() async {
     final file = await _file;
     if (!await file.exists()) return [];
 
@@ -30,7 +64,7 @@ class SnapshotStore {
     }
   }
 
-  Future<void> save(List<Snapshot> snapshots) async {
+  Future<void> _saveUnlocked(List<Snapshot> snapshots) async {
     final file = await _file;
     final temp = File('${file.path}.tmp');
     const encoder = JsonEncoder.withIndent('  ');
@@ -39,5 +73,17 @@ class SnapshotStore {
     );
     if (await file.exists()) await file.delete();
     await temp.rename(file.path);
+  }
+
+  Future<T> _exclusive<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _pendingOperation = _pendingOperation.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
   }
 }

@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'models/snapshot.dart';
 import 'services/git_snapshot_service.dart';
+import 'services/mcp_snapshot_server.dart';
 import 'services/snapshot_store.dart';
 
 Future<void> main(List<String> arguments) async {
@@ -41,10 +42,12 @@ class CheckpointApp extends StatelessWidget {
     super.key,
     this.initialPath,
     this.silentInitialFailure = false,
+    this.enableMcp = true,
   });
 
   final String? initialPath;
   final bool silentInitialFailure;
+  final bool enableMcp;
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +81,7 @@ class CheckpointApp extends StatelessWidget {
       home: CheckpointHome(
         initialPath: initialPath,
         silentInitialFailure: silentInitialFailure,
+        enableMcp: enableMcp,
       ),
     );
   }
@@ -88,10 +92,12 @@ class CheckpointHome extends StatefulWidget {
     super.key,
     this.initialPath,
     this.silentInitialFailure = false,
+    this.enableMcp = true,
   });
 
   final String? initialPath;
   final bool silentInitialFailure;
+  final bool enableMcp;
 
   @override
   State<CheckpointHome> createState() => _CheckpointHomeState();
@@ -106,6 +112,9 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   String? _selectedId;
   bool _busy = false;
   String? _error;
+  McpSnapshotServer? _mcpServer;
+  bool _mcpOnline = false;
+  String? _mcpError;
 
   List<Snapshot> get _snapshots {
     final repository = _repository;
@@ -143,6 +152,35 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   void initState() {
     super.initState();
     _initialize();
+    if (widget.enableMcp) _startMcpServer();
+  }
+
+  Future<void> _startMcpServer() async {
+    final server = McpSnapshotServer(
+      git: _git,
+      store: _store,
+      onSnapshotsChanged: (snapshots) {
+        if (mounted) setState(() => _allSnapshots = snapshots);
+      },
+    );
+    _mcpServer = server;
+    try {
+      await server.start();
+      if (mounted) setState(() => _mcpOnline = true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _mcpOnline = false;
+          _mcpError = error.toString();
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _mcpServer?.close();
+    super.dispose();
   }
 
   Future<void> _initialize() async {
@@ -228,10 +266,10 @@ class _CheckpointHomeState extends State<CheckpointHome> {
     await _runBusy(() async {
       final freshRepository = await _git.inspectRepository(repository.path);
       final snapshot = await _git.createSnapshot(freshRepository, title: title);
-      _allSnapshots.insert(0, snapshot);
-      await _store.save(_allSnapshots);
+      final snapshots = await _store.add(snapshot);
       if (!mounted) return;
       setState(() {
+        _allSnapshots = snapshots;
         _repository = freshRepository;
         _selectedId = snapshot.id;
       });
@@ -240,11 +278,30 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   }
 
   Future<void> _restoreSnapshot(Snapshot snapshot) async {
+    RepositoryInfo repository;
+    try {
+      repository = await _git.inspectRepository(snapshot.repositoryPath);
+    } catch (error) {
+      _setError(error);
+      return;
+    }
+    if (!mounted) return;
+
+    final baseMismatch = repository.headHash != snapshot.baseHash;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.history),
-        title: Text('还原到“${snapshot.title}”？'),
+        backgroundColor: baseMismatch ? const Color(0xFFFFF1F0) : null,
+        icon: Icon(
+          baseMismatch ? Icons.warning_amber_rounded : Icons.history,
+          color: baseMismatch ? const Color(0xFFBA1A1A) : null,
+        ),
+        title: Text(
+          baseMismatch ? '你确定要恢复到这个状态吗' : '还原到“${snapshot.title}”？',
+          style: baseMismatch
+              ? const TextStyle(color: Color(0xFF8C1D18))
+              : null,
+        ),
         content: const SizedBox(
           width: 440,
           child: Text('当前未提交修改和未跟踪文件将被该快照替换。HEAD、分支和 stash 列表不会改变。'),
@@ -256,6 +313,12 @@ class _CheckpointHomeState extends State<CheckpointHome> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
+            style: baseMismatch
+                ? FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFBA1A1A),
+                    foregroundColor: Colors.white,
+                  )
+                : null,
             child: const Text('确认还原'),
           ),
         ],
@@ -303,10 +366,8 @@ class _CheckpointHomeState extends State<CheckpointHome> {
     controller.dispose();
     if (title == null || title.isEmpty || title == snapshot.title) return;
 
-    final index = _allSnapshots.indexWhere((item) => item.id == snapshot.id);
-    if (index < 0) return;
-    setState(() => _allSnapshots[index] = snapshot.copyWith(title: title));
-    await _store.save(_allSnapshots);
+    final snapshots = await _store.rename(snapshot.id, title);
+    if (mounted) setState(() => _allSnapshots = snapshots);
   }
 
   Future<void> _deleteSnapshot(Snapshot snapshot) async {
@@ -328,11 +389,12 @@ class _CheckpointHomeState extends State<CheckpointHome> {
       ),
     );
     if (confirmed != true) return;
+    final snapshots = await _store.remove(snapshot.id);
+    if (!mounted) return;
     setState(() {
-      _allSnapshots.removeWhere((item) => item.id == snapshot.id);
+      _allSnapshots = snapshots;
       _selectedId = null;
     });
-    await _store.save(_allSnapshots);
   }
 
   Future<void> _copyHash(Snapshot snapshot) async {
@@ -391,8 +453,16 @@ class _CheckpointHomeState extends State<CheckpointHome> {
                   repository: _repository,
                   recentRepositories: _recentRepositories,
                   snapshotCount: _snapshots.length,
+                  mcpOnline: _mcpOnline,
+                  mcpError: _mcpError,
                   onOpen: _pickRepository,
                   onSelectRecent: _openRepository,
+                  onCopyMcpUrl: () async {
+                    await Clipboard.setData(
+                      const ClipboardData(text: McpSnapshotServer.url),
+                    );
+                    _showMessage('已复制 MCP 地址');
+                  },
                 ),
                 Expanded(
                   child: _repository == null
@@ -434,8 +504,10 @@ class _CheckpointHomeState extends State<CheckpointHome> {
                     child: _SnapshotList(
                       snapshots: snapshots,
                       selectedId: selected?.id,
+                      busy: _busy,
                       onSelected: (snapshot) =>
                           setState(() => _selectedId = snapshot.id),
+                      onRestore: _restoreSnapshot,
                       onCreate: _createSnapshot,
                     ),
                   ),
@@ -582,15 +654,21 @@ class _Sidebar extends StatelessWidget {
     required this.repository,
     required this.recentRepositories,
     required this.snapshotCount,
+    required this.mcpOnline,
+    required this.mcpError,
     required this.onOpen,
     required this.onSelectRecent,
+    required this.onCopyMcpUrl,
   });
 
   final RepositoryInfo? repository;
   final List<String> recentRepositories;
   final int snapshotCount;
+  final bool mcpOnline;
+  final String? mcpError;
   final VoidCallback onOpen;
   final ValueChanged<String> onSelectRecent;
+  final VoidCallback onCopyMcpUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -640,11 +718,44 @@ class _Sidebar extends StatelessWidget {
                   ),
             ],
             const Spacer(),
-            const Padding(
-              padding: EdgeInsets.all(18),
-              child: Text(
-                '本地存储 · 不写入 refs/stash',
-                style: TextStyle(color: Color(0xFF90958D), fontSize: 11),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 8, 14),
+              child: Tooltip(
+                message: mcpError ?? '复制 MCP 地址',
+                child: Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: mcpOnline
+                            ? const Color(0xFF58C994)
+                            : const Color(0xFFCC655C),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'MCP · 127.0.0.1:47173',
+                        style: TextStyle(
+                          color: Color(0xFFADB1AA),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: onCopyMcpUrl,
+                      tooltip: '复制 MCP 地址',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.copy,
+                        size: 15,
+                        color: Color(0xFFADB1AA),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -841,13 +952,17 @@ class _SnapshotList extends StatelessWidget {
   const _SnapshotList({
     required this.snapshots,
     required this.selectedId,
+    required this.busy,
     required this.onSelected,
+    required this.onRestore,
     required this.onCreate,
   });
 
   final List<Snapshot> snapshots;
   final String? selectedId;
+  final bool busy;
   final ValueChanged<Snapshot> onSelected;
+  final ValueChanged<Snapshot> onRestore;
   final VoidCallback onCreate;
 
   @override
@@ -869,7 +984,9 @@ class _SnapshotList extends StatelessWidget {
               return _SnapshotRow(
                 snapshot: snapshot,
                 selected: snapshot.id == selectedId,
+                busy: busy,
                 onTap: () => onSelected(snapshot),
+                onRestore: () => onRestore(snapshot),
               );
             },
           ),
@@ -883,12 +1000,16 @@ class _SnapshotRow extends StatelessWidget {
   const _SnapshotRow({
     required this.snapshot,
     required this.selected,
+    required this.busy,
     required this.onTap,
+    required this.onRestore,
   });
 
   final Snapshot snapshot;
   final bool selected;
+  final bool busy;
   final VoidCallback onTap;
+  final VoidCallback onRestore;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -900,7 +1021,14 @@ class _SnapshotRow extends StatelessWidget {
       selectedTileColor: const Color(0xFFE8F3ED),
       contentPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 7),
       minTileHeight: 70,
-      leading: const Icon(Icons.bookmark_outline, size: 22),
+      leading: Container(
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(
+          color: _colorFromHash(snapshot.baseHash),
+          shape: BoxShape.circle,
+        ),
+      ),
       title: Text(
         snapshot.title,
         maxLines: 1,
@@ -921,16 +1049,37 @@ class _SnapshotRow extends StatelessWidget {
         ),
       ),
       trailing: SizedBox(
-        width: 96,
-        child: Text(
-          '${snapshot.fileCount} 文件  +${snapshot.insertions}  -${snapshot.deletions}',
-          textAlign: TextAlign.right,
-          maxLines: 1,
-          style: const TextStyle(fontSize: 11, color: Color(0xFF747A72)),
+        width: 138,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Text(
+                '${snapshot.fileCount} 文件  +${snapshot.insertions}  -${snapshot.deletions}',
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF747A72)),
+              ),
+            ),
+            const SizedBox(width: 6),
+            IconButton(
+              onPressed: busy ? null : onRestore,
+              tooltip: '恢复快照',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.restore, size: 19),
+            ),
+          ],
         ),
       ),
     ),
   );
+}
+
+Color _colorFromHash(String hash) {
+  final prefixLength = hash.length < 8 ? hash.length : 8;
+  final seed = int.tryParse(hash.substring(0, prefixLength), radix: 16) ?? 0;
+  return HSLColor.fromAHSL(1, (seed % 360).toDouble(), 0.58, 0.46).toColor();
 }
 
 class _SnapshotDetails extends StatelessWidget {
@@ -954,9 +1103,9 @@ class _SnapshotDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = snapshot;
     return Container(
-      color: Colors.white,
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
+        color: Colors.white,
         border: Border(left: BorderSide(color: Color(0xFFE3E3DE))),
       ),
       child: item == null

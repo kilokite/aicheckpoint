@@ -35,3 +35,36 @@ checkpoint.exe
 - 仓库存在未解决的合并冲突时，Git 无法写出 index tree，应用会拒绝创建快照。
 
 按设计，应用只保存对象哈希，没有创建防止 Git GC 的引用。
+
+## MCP 服务
+
+应用运行时会在本机启动 Streamable HTTP MCP 服务：
+
+```text
+http://127.0.0.1:47173/mcp
+```
+
+把这个 URL 添加到支持 HTTP MCP 的客户端即可。常见客户端配置形态如下：
+
+```json
+{
+  "mcpServers": {
+    "checkpoint": {
+      "url": "http://127.0.0.1:47173/mcp"
+    }
+  }
+}
+```
+
+服务提供两个不可删改的工具：
+
+- `checkpoint_create_snapshot`：创建项目快照。
+- `checkpoint_get_latest_snapshot`：只读查询项目的最新快照，供自动保存插件去重。
+
+创建工具参数为：
+
+- `project_path`：必填，Git 项目的绝对路径。
+- `title`：可选，最长 80 个字符的快照名称。
+
+MCP 不暴露删除、重命名、还原或修改快照的工具。服务仅绑定
+`127.0.0.1`，并启用本地 Origin 限制；Checkpoint 退出后服务随之关闭。
