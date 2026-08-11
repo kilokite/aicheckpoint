@@ -1,5 +1,5 @@
 # Checkpoint
-
+![alt text](docs/potato.png)
 一个本地 Git 快照工具，设计用来给 Codex 擦屁股，不过任何有 Git 的项目都能手动使用，也可以接入支持 HTTP MCP 的其他工具。
 
 基本用法就是在 AI 改代码前留个快照，改坏了随时恢复。
