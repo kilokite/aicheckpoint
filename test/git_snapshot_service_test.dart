@@ -103,6 +103,22 @@ void main() {
       );
     },
   );
+
+  test('detects snapshots removed by garbage collection', () async {
+    final workingFile = File(p.join(temporaryDirectory.path, 'working.txt'));
+    await workingFile.writeAsString('snapshot only\n');
+    final repository = await service.inspectRepository(temporaryDirectory.path);
+    final snapshot = await service.createSnapshot(
+      repository,
+      title: 'garbage collection test',
+    );
+
+    expect(await service.isSnapshotAvailable(snapshot), isTrue);
+
+    await service.runGarbageCollection(temporaryDirectory.path);
+
+    expect(await service.isSnapshotAvailable(snapshot), isFalse);
+  });
 }
 
 Future<String> _git(String directory, List<String> arguments) async {

@@ -106,6 +106,22 @@ class GitSnapshotService {
     await _git(root, ['read-tree', '--reset', snapshot.indexTreeHash]);
   }
 
+  Future<bool> isSnapshotAvailable(Snapshot snapshot) async {
+    final commitExists = await _objectExists(
+      snapshot.repositoryPath,
+      '${snapshot.commitHash}^{commit}',
+    );
+    if (!commitExists) return false;
+    return _objectExists(
+      snapshot.repositoryPath,
+      '${snapshot.indexTreeHash}^{tree}',
+    );
+  }
+
+  Future<void> runGarbageCollection(String repositoryPath) async {
+    await _git(repositoryPath, ['gc', '--prune=now']);
+  }
+
   Future<(int, int, int)> _diffStats(
     String root,
     String base,
@@ -151,6 +167,21 @@ class GitSnapshotService {
       throw GitSnapshotException(detail.isEmpty ? 'Git 命令执行失败' : detail);
     }
     return _GitResult(stdout);
+  }
+
+  Future<bool> _objectExists(String workingDirectory, String object) async {
+    ProcessResult result;
+    try {
+      result = await Process.run(
+        'git',
+        ['cat-file', '-e', object],
+        workingDirectory: workingDirectory,
+        runInShell: false,
+      );
+    } on ProcessException catch (error) {
+      throw GitSnapshotException('无法启动 Git：${error.message}');
+    }
+    return result.exitCode == 0;
   }
 
   int _nulSeparatedCount(String value) {

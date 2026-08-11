@@ -48,6 +48,15 @@ class SnapshotStore {
     return snapshots;
   });
 
+  Future<List<Snapshot>> removeMany(Iterable<String> ids) =>
+      _exclusive(() async {
+        final snapshots = await _loadUnlocked();
+        final idSet = ids.toSet();
+        snapshots.removeWhere((item) => idSet.contains(item.id));
+        await _saveUnlocked(snapshots);
+        return snapshots;
+      });
+
   Future<List<Snapshot>> _loadUnlocked() async {
     final file = await _file;
     if (!await file.exists()) return [];

@@ -302,9 +302,14 @@ class _CheckpointHomeState extends State<CheckpointHome> {
               ? const TextStyle(color: Color(0xFF8C1D18))
               : null,
         ),
-        content: const SizedBox(
+        content: SizedBox(
           width: 440,
-          child: Text('当前未提交修改和未跟踪文件将被该快照替换。HEAD、分支和 stash 列表不会改变。'),
+          child: Text(
+            baseMismatch
+                ? '该快照基准提交与当前提交不一致，可以正确恢复，但请确认你的行为。\n\n'
+                      '当前未提交修改和未跟踪文件将被该快照替换。HEAD、分支和 stash 列表不会改变。'
+                : '当前未提交修改和未跟踪文件将被该快照替换。HEAD、分支和 stash 列表不会改变。',
+          ),
         ),
         actions: [
           TextButton(
@@ -402,6 +407,117 @@ class _CheckpointHomeState extends State<CheckpointHome> {
     _showMessage('已复制快照哈希');
   }
 
+  Future<List<Snapshot>> _findUnavailableSnapshots() async {
+    final results = await Future.wait(
+      _snapshots.map((snapshot) async {
+        final available = await _git.isSnapshotAvailable(snapshot);
+        return available ? null : snapshot;
+      }),
+    );
+    return results.whereType<Snapshot>().toList();
+  }
+
+  Future<void> _checkUnavailableSnapshots() async {
+    await _runBusy(() async {
+      final unavailable = await _findUnavailableSnapshots();
+      if (!mounted) return;
+
+      if (unavailable.isEmpty) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            icon: const Icon(Icons.check_circle_outline),
+            title: const Text('所有快照均可用'),
+            content: const Text('未发现被 Git GC 回收的快照。'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      final shouldDelete = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.error_outline, color: Color(0xFFBA1A1A)),
+          title: Text('发现 ${unavailable.length} 个失效快照'),
+          content: const SizedBox(
+            width: 440,
+            child: Text('这些快照的 Git 对象已被回收，无法再恢复。是否从列表中删除它们？'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('保留记录'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除失效记录'),
+            ),
+          ],
+        ),
+      );
+      if (shouldDelete == true) await _removeSnapshots(unavailable);
+    });
+  }
+
+  Future<void> _runGarbageCollection() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFFFF1F0),
+        icon: const Icon(Icons.warning_amber_rounded, color: Color(0xFFBA1A1A)),
+        title: const Text(
+          '确定要执行 Git GC 吗？',
+          style: TextStyle(color: Color(0xFF8C1D18)),
+        ),
+        content: const SizedBox(
+          width: 440,
+          child: Text(
+            '该操作会立即清理不可达的 Git 对象，可能使快照永久无法恢复。'
+            '执行完成后，已被回收的快照记录会自动从列表删除。',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFBA1A1A),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('执行 GC'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await _runBusy(() async {
+      await _git.runGarbageCollection(_repository!.path);
+      final unavailable = await _findUnavailableSnapshots();
+      if (unavailable.isNotEmpty) await _removeSnapshots(unavailable);
+      _showMessage('Git GC 已完成，删除了 ${unavailable.length} 个失效快照记录');
+    });
+  }
+
+  Future<void> _removeSnapshots(List<Snapshot> snapshots) async {
+    final removedIds = snapshots.map((item) => item.id).toSet();
+    final remaining = await _store.removeMany(removedIds);
+    if (!mounted) return;
+    setState(() {
+      _allSnapshots = remaining;
+      if (removedIds.contains(_selectedId)) _selectedId = null;
+    });
+  }
+
   Future<void> _runBusy(Future<void> Function() action) async {
     if (_busy) return;
     setState(() {
@@ -490,6 +606,8 @@ class _CheckpointHomeState extends State<CheckpointHome> {
           repository: repository,
           busy: _busy,
           onRefresh: _refresh,
+          onCheckSnapshots: _checkUnavailableSnapshots,
+          onGarbageCollect: _runGarbageCollection,
           onCreate: _createSnapshot,
         ),
         if (_busy) const LinearProgressIndicator(minHeight: 2),
@@ -849,12 +967,16 @@ class _RepositoryHeader extends StatelessWidget {
     required this.repository,
     required this.busy,
     required this.onRefresh,
+    required this.onCheckSnapshots,
+    required this.onGarbageCollect,
     required this.onCreate,
   });
 
   final RepositoryInfo repository;
   final bool busy;
   final VoidCallback onRefresh;
+  final VoidCallback onCheckSnapshots;
+  final VoidCallback onGarbageCollect;
   final VoidCallback onCreate;
 
   @override
@@ -932,6 +1054,20 @@ class _RepositoryHeader extends StatelessWidget {
           child: IconButton(
             onPressed: busy ? null : onRefresh,
             icon: const Icon(Icons.refresh),
+          ),
+        ),
+        Tooltip(
+          message: '检查失效快照',
+          child: IconButton(
+            onPressed: busy ? null : onCheckSnapshots,
+            icon: const Icon(Icons.fact_check_outlined),
+          ),
+        ),
+        Tooltip(
+          message: '执行 Git GC',
+          child: IconButton(
+            onPressed: busy ? null : onGarbageCollect,
+            icon: const Icon(Icons.cleaning_services_outlined),
           ),
         ),
         const SizedBox(width: 8),
