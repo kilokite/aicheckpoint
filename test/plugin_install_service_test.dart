@@ -110,16 +110,23 @@ void main() {
     expect(prompt, contains('personal marketplace'));
   });
 
-  test('export includes the PI extension asset', () async {
-    final result = await service.exportForCodex();
+  test('export includes the PI MCP proxy extension', () async {
+    // 用真实文件内容做资源，确保导出的 PI 扩展包含实际实现。
+    final realAssetService = PluginInstallService(
+      homeDirectory: homeDirectory,
+      exportRoot: exportRoot,
+      assetLoader: (path) => File(path).readAsString(),
+    );
+    final result = await realAssetService.exportForCodex();
     final extension = File(
       p.join(result.pluginDirectory.path, 'pi', 'checkpoint-autosave.ts'),
     );
     expect(extension.existsSync(), isTrue);
-    expect(
-      await extension.readAsString(),
-      'asset:plugins/checkpoint-autosave/pi/checkpoint-autosave.ts\n',
-    );
+    final content = await extension.readAsString();
+    expect(content, contains('registerTool'));
+    expect(content, contains('postMcp'));
+    expect(content, contains('checkpoint_create_snapshot'));
+    expect(content, contains('MCP_URL'));
   });
 
   test('config helper appends missing plugin section', () {

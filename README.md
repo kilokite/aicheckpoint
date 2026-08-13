@@ -48,7 +48,8 @@ http://127.0.0.1:47173/mcp
 应用导出的插件目录还包含 `pi/checkpoint-autosave.ts`，用于 [PI 扩展](https://pi.dev/docs/latest/extensions)。
 把它复制到 `~/.pi/agent/extensions/checkpoint-autosave.ts`（或项目的 `.pi/extensions/`）后，PI 会在每次
 发送用户提示前把自动保存规则注入系统上下文。规则要求 AI 在完成改动和验证后、回复前自行调用
-`checkpoint_create_snapshot`，因此 PI 扩展本身不注册钩子、命令或工具，也不执行 Git 操作。
+`checkpoint_create_snapshot`。PI 扩展只注册这个 MCP 代理工具，不执行 Git 状态检测，也不在
+`agent_end` 等生命周期事件中自动创建快照。
 
 PI 扩展只依赖 PI 提供的 TypeScript 运行时和 Node.js 内置模块；使用前请保持 Checkpoint 桌面程序运行。
 
