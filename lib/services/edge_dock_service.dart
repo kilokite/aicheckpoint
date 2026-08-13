@@ -86,6 +86,9 @@ class EdgeDockService extends ChangeNotifier {
     _visible = false;
     notifyListeners();
 
+    // 贴边模式下不再占用任务栏，避免隐藏时仍留下一个图标。
+    await windowManager.setSkipTaskbar(true);
+
     await _animateTo(_dockedBounds);
     if (_enabled) {
       _startPolling();
@@ -97,6 +100,7 @@ class EdgeDockService extends ChangeNotifier {
     _enabled = false;
     _stopPolling();
     notifyListeners();
+    await windowManager.setSkipTaskbar(false);
     await _animateTo(_restoreBounds);
     _visible = false;
   }
@@ -110,6 +114,7 @@ class EdgeDockService extends ChangeNotifier {
     _stopPolling();
     _visible = false;
     notifyListeners();
+    windowManager.setSkipTaskbar(false);
   }
 
   void _startPolling() {
