@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
+import 'services/edge_dock_service.dart';
 
 export 'app.dart' show CheckpointApp;
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+  windowManager.addListener(EdgeDockService.instance);
   const windowOptions = WindowOptions(
     size: Size(1280, 720),
     minimumSize: Size(900, 560),

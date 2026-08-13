@@ -54,11 +54,7 @@ class WindowTitleBar extends StatelessWidget {
           ),
         ),
         const _EdgeDockButton(),
-        _WindowButton(
-          tooltip: '最小化',
-          icon: Icons.remove,
-          onPressed: windowManager.minimize,
-        ),
+        _MinimizeButton(),
         _WindowButton(
           tooltip: '最大化',
           icon: Icons.crop_square,
@@ -128,18 +124,40 @@ class _EdgeDockButtonState extends State<_EdgeDockButton> {
   );
 }
 
+class _MinimizeButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: EdgeDockService.instance,
+    builder: (context, _) {
+      // 贴边模式下窗口不可最小化（任务栏已隐藏，最小化后无从找回）。
+      final docked = EdgeDockService.instance.enabled;
+      return Tooltip(
+        message: docked ? '贴边模式下不可最小化' : '最小化',
+        child: _WindowButton(
+          tooltip: docked ? '贴边模式下不可最小化' : '最小化',
+          icon: Icons.remove,
+          enabled: !docked,
+          onPressed: docked ? () async {} : windowManager.minimize,
+        ),
+      );
+    },
+  );
+}
+
 class _WindowButton extends StatefulWidget {
   const _WindowButton({
     required this.tooltip,
     required this.icon,
     required this.onPressed,
     this.closeButton = false,
+    this.enabled = true,
   });
 
   final String tooltip;
   final IconData icon;
   final Future<void> Function() onPressed;
   final bool closeButton;
+  final bool enabled;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -155,17 +173,23 @@ class _WindowButtonState extends State<_WindowButton> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: InkWell(
-        onTap: widget.onPressed,
+        onTap: widget.enabled ? widget.onPressed : null,
         child: SizedBox(
           width: 48,
           height: 38,
           child: ColoredBox(
-            color: _hovered
+            color: _hovered && widget.enabled
                 ? widget.closeButton
                       ? const Color(0xFFC42B1C)
                       : const Color(0xFF363A35)
                 : Colors.transparent,
-            child: Icon(widget.icon, size: 16, color: const Color(0xFFD7DAD5)),
+            child: Icon(
+              widget.icon,
+              size: 16,
+              color: widget.enabled
+                  ? const Color(0xFFD7DAD5)
+                  : const Color(0xFF6A6E68),
+            ),
           ),
         ),
       ),

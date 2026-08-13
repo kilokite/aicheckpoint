@@ -10,7 +10,7 @@ import 'windows_native.dart';
 /// 鼠标移动到屏幕最右边缘对应位置时再滑出来（模仿 QQ 的贴边逻辑）。
 ///
 /// 仅支持 Windows，其余平台切换开关不生效。
-class EdgeDockService extends ChangeNotifier {
+class EdgeDockService extends ChangeNotifier with WindowListener {
   EdgeDockService._();
 
   static final EdgeDockService instance = EdgeDockService._();
@@ -27,11 +27,16 @@ class EdgeDockService extends ChangeNotifier {
   static const Duration _pollInterval = Duration(milliseconds: 80);
   static const Duration _slideDuration = Duration(milliseconds: 160);
 
+  /// 显示器几何信息（工作区/分辨率）属于低频变化，
+  /// 不必跟随鼠标检测的高频轮询一起重算。
+  static const Duration _geometryRefreshInterval = Duration(milliseconds: 500);
+
   bool _enabled = false;
   bool _visible = false;
   bool _animating = false;
   int _animationGeneration = 0;
   Timer? _timer;
+  DateTime _lastGeometryRefresh = DateTime.fromMillisecondsSinceEpoch(0);
 
   Rect _restoreBounds = Rect.zero;
   Rect _dockedBounds = Rect.zero;
@@ -52,23 +57,13 @@ class EdgeDockService extends ChangeNotifier {
       await windowManager.unmaximize();
     }
 
-    final dpr = windowManager.getDevicePixelRatio();
-    final workAreaRaw = getPrimaryWorkArea();
-    final workArea = Rect.fromLTRB(
-      workAreaRaw.left / dpr,
-      workAreaRaw.top / dpr,
-      workAreaRaw.right / dpr,
-      workAreaRaw.bottom / dpr,
-    );
-
     final current = await windowManager.getBounds();
     _restoreBounds = current;
 
-    final maxTop = (workArea.bottom - current.height).clamp(
-      workArea.top,
-      workArea.bottom,
-    );
-    final top = current.top.clamp(workArea.top, maxTop);
+    // 依据窗口当前所在的显示器计算工作区，而不是固定用主显示器，
+    // 这样多显示器下也能贴到正确的屏幕边缘。
+    final workArea = _workAreaFor(current);
+    final top = _clampTop(current.top, current.height, workArea);
     _dockedBounds = Rect.fromLTWH(
       workArea.right - _sliverWidth,
       top,
@@ -86,6 +81,9 @@ class EdgeDockService extends ChangeNotifier {
     _visible = false;
     notifyListeners();
 
+    // 开启时已经算好几何信息，避免第一次轮询重复计算。
+    _lastGeometryRefresh = DateTime.now();
+
     // 贴边模式下不再占用任务栏，避免隐藏时仍留下一个图标。
     await windowManager.setSkipTaskbar(true);
 
@@ -101,7 +99,8 @@ class EdgeDockService extends ChangeNotifier {
     _stopPolling();
     notifyListeners();
     await windowManager.setSkipTaskbar(false);
-    await _animateTo(_restoreBounds);
+    // 恢复位置可能因显示器变化而落到屏幕外，这里做一次钳制兜底。
+    await _animateTo(_clampToWorkArea(_restoreBounds, _workAreaFor(_restoreBounds)));
     _visible = false;
   }
 
@@ -117,6 +116,14 @@ class EdgeDockService extends ChangeNotifier {
     windowManager.setSkipTaskbar(false);
   }
 
+  @override
+  void onWindowMinimize() {
+    if (!_enabled || !Platform.isWindows) return;
+    // 贴边模式下窗口不可最小化（任务栏已隐藏，最小化后无从找回），
+    // 拦截一切最小化行为（标题栏按钮、Win+D、Win+M、Alt+Space 等）并立即恢复。
+    unawaited(windowManager.restore());
+  }
+
   void _startPolling() {
     _timer?.cancel();
     _timer = Timer.periodic(_pollInterval, (_) => _poll());
@@ -129,6 +136,13 @@ class EdgeDockService extends ChangeNotifier {
 
   Future<void> _poll() async {
     if (!_enabled || _animating) return;
+
+    // 显示器几何信息低频刷新；鼠标检测仍保持高频，保证贴边响应灵敏。
+    final now = DateTime.now();
+    if (now.difference(_lastGeometryRefresh) >= _geometryRefreshInterval) {
+      _lastGeometryRefresh = now;
+      await _refreshGeometry();
+    }
 
     final cursorRaw = getGlobalCursorPosition();
     final dpr = windowManager.getDevicePixelRatio();
@@ -146,6 +160,26 @@ class EdgeDockService extends ChangeNotifier {
     }
   }
 
+  /// 根据窗口当前所在显示器重新计算几何信息，
+  /// 以应对分辨率变化、任务栏位置变化、显示器插拔等情况。
+  Future<void> _refreshGeometry() async {
+    final bounds = await windowManager.getBounds();
+    final workArea = _workAreaFor(bounds);
+    final top = _clampTop(bounds.top, bounds.height, workArea);
+    _dockedBounds = Rect.fromLTWH(
+      workArea.right - _sliverWidth,
+      top,
+      bounds.width,
+      bounds.height,
+    );
+    _visibleBounds = Rect.fromLTWH(
+      workArea.right - bounds.width,
+      top,
+      bounds.width,
+      bounds.height,
+    );
+  }
+
   Future<void> _show() async {
     _visible = true;
     notifyListeners();
@@ -156,6 +190,47 @@ class EdgeDockService extends ChangeNotifier {
     _visible = false;
     notifyListeners();
     await _animateTo(_dockedBounds);
+  }
+
+  /// 返回包含 [bounds] 中心点的显示器工作区（逻辑像素）。
+  Rect _workAreaFor(Rect bounds) {
+    final dpr = windowManager.getDevicePixelRatio();
+    final centerX = (bounds.left + bounds.width / 2) * dpr;
+    final centerY = (bounds.top + bounds.height / 2) * dpr;
+    final wa = getMonitorWorkAreaAt(centerX.round(), centerY.round());
+    return Rect.fromLTRB(
+      wa.left / dpr,
+      wa.top / dpr,
+      wa.right / dpr,
+      wa.bottom / dpr,
+    );
+  }
+
+  /// 把窗口顶部限制在 [workArea] 内，避免超出可点击/可见范围。
+  double _clampTop(double top, double height, Rect workArea) {
+    final maxTop = (workArea.bottom - height).clamp(
+      workArea.top,
+      workArea.bottom,
+    );
+    return top.clamp(workArea.top, maxTop);
+  }
+
+  /// 把窗口整体钳制到 [workArea] 内（窗口大于工作区时退化为尽量靠左上）。
+  Rect _clampToWorkArea(Rect bounds, Rect workArea) {
+    final maxLeft = (workArea.right - bounds.width).clamp(
+      workArea.left,
+      workArea.right,
+    );
+    final maxTop = (workArea.bottom - bounds.height).clamp(
+      workArea.top,
+      workArea.bottom,
+    );
+    return Rect.fromLTWH(
+      bounds.left.clamp(workArea.left, maxLeft),
+      bounds.top.clamp(workArea.top, maxTop),
+      bounds.width,
+      bounds.height,
+    );
   }
 
   /// 以 ease-out 曲线把窗口滑动到目标位置。

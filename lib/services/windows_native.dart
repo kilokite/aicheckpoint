@@ -29,6 +29,18 @@ final class _Rect extends Struct {
   external int bottom;
 }
 
+final class _MonitorInfo extends Struct {
+  @Uint32()
+  external int cbSize;
+
+  external _Rect rcMonitor;
+
+  external _Rect rcWork;
+
+  @Uint32()
+  external int dwFlags;
+}
+
 typedef _GetCursorPosC = Int32 Function(Pointer<_Point>);
 typedef _GetCursorPosDart = int Function(Pointer<_Point>);
 
@@ -48,14 +60,25 @@ typedef _SystemParametersInfoDart = int Function(
   int,
 );
 
+typedef _MonitorFromPointC = IntPtr Function(_Point, Uint32);
+typedef _MonitorFromPointDart = int Function(_Point, int);
+
+typedef _GetMonitorInfoC = Int32 Function(IntPtr, Pointer<_MonitorInfo>);
+typedef _GetMonitorInfoDart = int Function(int, Pointer<_MonitorInfo>);
+
 DynamicLibrary? _user32;
 _GetCursorPosDart? _getCursorPos;
 _GetSystemMetricsDart? _getSystemMetrics;
 _SystemParametersInfoDart? _systemParametersInfo;
+_MonitorFromPointDart? _monitorFromPoint;
+_GetMonitorInfoDart? _getMonitorInfo;
 
 const int _smCxScreen = 0;
 const int _smCyScreen = 1;
 const int _spiGetWorkArea = 0x0030;
+
+/// 找不到显示器时返回距离最近的显示器（用于窗口因分辨率变化等原因跑到屏幕外时兜底）。
+const int _monitorDefaultToNearest = 2;
 
 void _ensureLoaded() {
   if (!Platform.isWindows || _user32 != null) return;
@@ -69,6 +92,11 @@ void _ensureLoaded() {
       );
   _systemParametersInfo = lib.lookupFunction<_SystemParametersInfoC,
       _SystemParametersInfoDart>('SystemParametersInfoA');
+  _monitorFromPoint = lib.lookupFunction<_MonitorFromPointC,
+      _MonitorFromPointDart>('MonitorFromPoint');
+  _getMonitorInfo = lib.lookupFunction<_GetMonitorInfoC, _GetMonitorInfoDart>(
+    'GetMonitorInfo',
+  );
 }
 
 /// 全局鼠标位置（物理像素）。非 Windows 返回 (0, 0)。
@@ -109,5 +137,36 @@ void _ensureLoaded() {
     );
   } finally {
     calloc.free(rect);
+  }
+}
+
+/// 包含指定物理坐标的显示器工作区（物理像素，不含任务栏）。
+///
+/// 若该点不在任何显示器内，则返回距离最近的显示器（避免窗口跑出屏幕后无法找回）。
+/// 非 Windows 返回全 0。
+({int left, int top, int right, int bottom}) getMonitorWorkAreaAt(
+  int x,
+  int y,
+) {
+  if (!Platform.isWindows) return (left: 0, top: 0, right: 0, bottom: 0);
+  _ensureLoaded();
+  final point = calloc<_Point>();
+  final info = calloc<_MonitorInfo>();
+  try {
+    point.ref.x = x;
+    point.ref.y = y;
+    final monitor = _monitorFromPoint!(point.ref, _monitorDefaultToNearest);
+    if (monitor == 0) return getPrimaryWorkArea();
+    info.ref.cbSize = sizeOf<_MonitorInfo>();
+    _getMonitorInfo!(monitor, info);
+    return (
+      left: info.ref.rcWork.left,
+      top: info.ref.rcWork.top,
+      right: info.ref.rcWork.right,
+      bottom: info.ref.rcWork.bottom,
+    );
+  } finally {
+    calloc.free(point);
+    calloc.free(info);
   }
 }
