@@ -220,7 +220,8 @@ def session_context() -> None:
         "the Git worktree, after verification and before the final response, call "
         "checkpoint_create_snapshot exactly once. Use the repository root as "
         "project_path and title it Auto:<concise one-sentence Chinese summary>. "
-        "Do not edit files after creating it."
+        "Do not edit files after creating it. Unless the user explicitly asks, "
+        "never create a Git commit."
     )
     print(
         json.dumps(
@@ -241,7 +242,8 @@ def request_ai_snapshot(root: Path) -> None:
         "the checkpoint_create_snapshot MCP tool exactly once with "
         f"project_path={root} and a concise Chinese title in the form "
         "Auto:<one-sentence summary of what you changed>. Do not edit files "
-        "after creating the snapshot, then finish the response."
+        "after creating the snapshot, then finish the response. Unless the user "
+        "explicitly asks, never create a Git commit."
     )
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
 

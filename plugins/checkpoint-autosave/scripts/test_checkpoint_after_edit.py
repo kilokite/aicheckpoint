@@ -59,6 +59,10 @@ class CheckpointAfterEditTest(unittest.TestCase):
             "Checkpoint autosave is active",
             baseline["hookSpecificOutput"]["additionalContext"],
         )
+        self.assertIn(
+            "never create a Git commit",
+            baseline["hookSpecificOutput"]["additionalContext"],
+        )
         self.assertEqual(self.invoke(baseline=False), "")
 
         (self.root / "tracked.txt").write_text("changed\n", encoding="utf-8")
@@ -66,6 +70,7 @@ class CheckpointAfterEditTest(unittest.TestCase):
             result = json.loads(self.invoke(baseline=False))
         self.assertEqual(result["decision"], "block")
         self.assertIn("Auto:<one-sentence summary", result["reason"])
+        self.assertIn("never create a Git commit", result["reason"])
 
         with mock.patch.object(hook, "latest_snapshot_matches", return_value=True):
             self.assertEqual(self.invoke(baseline=False), "")

@@ -21,6 +21,7 @@ worktree, no matter how many edit tools ran during the turn.
   `checkpoint_create_snapshot` exactly once with the repository root and title
   `Auto:<concise one-sentence Chinese summary of the changes>`.
 - Do not edit files after creating the snapshot.
+- Unless the user explicitly asks, never create a Git commit.
 - Never delete, rename, restore, or otherwise mutate snapshots on the model's
   initiative.
 - If the hook reports that Checkpoint is unavailable, tell the user to start

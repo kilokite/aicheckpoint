@@ -9,7 +9,8 @@ const AUTOSAVE_CONTEXT =
   "the Git worktree, after verification and before the final response, call " +
   "the checkpoint_create_snapshot tool exactly once. Use the repository " +
   "root as project_path and title it Auto:<concise one-sentence Chinese " +
-  "summary>. Do not edit files after creating it.";
+  "summary>. Do not edit files after creating it. Unless the user explicitly " +
+  "asks, never create a Git commit.";
 
 export default function checkpointAutosave(pi: ExtensionAPI): void {
   pi.on("before_agent_start", async (event) => ({
