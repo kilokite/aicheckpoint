@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../services/edge_dock_service.dart';
+
 class WindowTitleBar extends StatelessWidget {
   const WindowTitleBar({super.key});
 
@@ -12,7 +14,12 @@ class WindowTitleBar extends StatelessWidget {
       children: [
         Expanded(
           child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
+            behavior: HitTestBehavior.translucent,
+            onPanStart: (_) {
+              // 用户手动拖动标题栏时，退出贴边模式以免互相争抢。
+              EdgeDockService.instance.cancel();
+              windowManager.startDragging();
+            },
             onDoubleTap: () async {
               if (await windowManager.isMaximized()) {
                 await windowManager.unmaximize();
@@ -20,7 +27,8 @@ class WindowTitleBar extends StatelessWidget {
                 await windowManager.maximize();
               }
             },
-            child: const DragToMoveArea(
+            child: const SizedBox(
+              height: double.infinity,
               child: Padding(
                 padding: EdgeInsets.only(left: 14),
                 child: Row(
@@ -45,6 +53,7 @@ class WindowTitleBar extends StatelessWidget {
             ),
           ),
         ),
+        const _EdgeDockButton(),
         _WindowButton(
           tooltip: '最小化',
           icon: Icons.remove,
@@ -69,6 +78,53 @@ class WindowTitleBar extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+class _EdgeDockButton extends StatefulWidget {
+  const _EdgeDockButton();
+
+  @override
+  State<_EdgeDockButton> createState() => _EdgeDockButtonState();
+}
+
+class _EdgeDockButtonState extends State<_EdgeDockButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: EdgeDockService.instance,
+    builder: (context, _) {
+      final active = EdgeDockService.instance.enabled;
+      return Tooltip(
+        message: active ? '退出贴边模式' : '贴边模式（贴到右侧隐藏）',
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: InkWell(
+            onTap: EdgeDockService.instance.toggle,
+            child: SizedBox(
+              width: 48,
+              height: 38,
+              child: ColoredBox(
+                color: _hovered
+                    ? const Color(0xFF363A35)
+                    : active
+                    ? const Color(0xFF1B2A22)
+                    : Colors.transparent,
+                child: Icon(
+                  Icons.last_page,
+                  size: 16,
+                  color: active
+                      ? const Color(0xFF58C994)
+                      : const Color(0xFFD7DAD5),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
   );
 }
 
