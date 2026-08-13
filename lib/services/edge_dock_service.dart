@@ -84,8 +84,10 @@ class EdgeDockService extends ChangeNotifier with WindowListener {
     // 开启时已经算好几何信息，避免第一次轮询重复计算。
     _lastGeometryRefresh = DateTime.now();
 
-    // 贴边模式下不再占用任务栏，避免隐藏时仍留下一个图标。
+    // 贴边模式下不再占用任务栏，避免隐藏时仍留下一个图标；
+    // 同时保持置顶，确保滑出时不会被其他窗口遮住。
     await windowManager.setSkipTaskbar(true);
+    await windowManager.setAlwaysOnTop(true);
 
     await _animateTo(_dockedBounds);
     if (_enabled) {
@@ -99,6 +101,7 @@ class EdgeDockService extends ChangeNotifier with WindowListener {
     _stopPolling();
     notifyListeners();
     await windowManager.setSkipTaskbar(false);
+    await windowManager.setAlwaysOnTop(false);
     // 恢复位置可能因显示器变化而落到屏幕外，这里做一次钳制兜底。
     await _animateTo(_clampToWorkArea(_restoreBounds, _workAreaFor(_restoreBounds)));
     _visible = false;
@@ -114,6 +117,7 @@ class EdgeDockService extends ChangeNotifier with WindowListener {
     _visible = false;
     notifyListeners();
     windowManager.setSkipTaskbar(false);
+    windowManager.setAlwaysOnTop(false);
   }
 
   @override
