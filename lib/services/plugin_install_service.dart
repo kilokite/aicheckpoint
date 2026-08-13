@@ -40,6 +40,8 @@ class PluginInstallService {
         'scripts/test_checkpoint_after_edit.py',
     'plugins/checkpoint-autosave/skills/checkpoint-autosave/SKILL.md':
         'skills/checkpoint-autosave/SKILL.md',
+    'plugins/checkpoint-autosave/pi/checkpoint-autosave.ts':
+        'pi/checkpoint-autosave.ts',
   };
 
   final Directory? _homeDirectory;
@@ -70,6 +72,20 @@ class PluginInstallService {
     final root = _exportRoot ?? await _defaultExportRoot();
     final pluginDirectory = Directory(p.join(root.path, pluginName));
     await _writePlugin(pluginDirectory);
+    return PluginInstallResult(pluginDirectory: pluginDirectory);
+  }
+
+  Future<PluginInstallResult> installPi() async {
+    final home = _homeDirectory ?? _resolveHomeDirectory();
+    final pluginDirectory = Directory(
+      p.join(home.path, '.pi', 'agent', 'extensions'),
+    );
+    await pluginDirectory.create(recursive: true);
+    final file = File(p.join(pluginDirectory.path, '$pluginName.ts'));
+    await _writeTextAtomically(
+      file,
+      await _assetLoader('plugins/checkpoint-autosave/pi/$pluginName.ts'),
+    );
     return PluginInstallResult(pluginDirectory: pluginDirectory);
   }
 

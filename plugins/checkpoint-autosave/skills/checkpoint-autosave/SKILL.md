@@ -5,9 +5,9 @@ description: Automatically create one immutable Checkpoint snapshot after every 
 
 # Checkpoint Autosave
 
-The plugin's lifecycle hook checks Git content once when each Codex turn stops.
-It creates one Checkpoint snapshot when that turn changed the worktree, no
-matter how many edit tools ran during the turn.
+The plugin initializes autosave context when a Codex session starts. The model
+creates one Checkpoint snapshot before finishing a turn that changed the
+worktree, no matter how many edit tools ran during the turn.
 
 ## Requirements
 
@@ -21,8 +21,6 @@ matter how many edit tools ran during the turn.
   `checkpoint_create_snapshot` exactly once with the repository root and title
   `Auto:<concise one-sentence Chinese summary of the changes>`.
 - Do not edit files after creating the snapshot.
-- The Stop hook is an audit fallback. If it reports a missing snapshot, make
-  the same MCP call before attempting to finish again.
 - Never delete, rename, restore, or otherwise mutate snapshots on the model's
   initiative.
 - If the hook reports that Checkpoint is unavailable, tell the user to start

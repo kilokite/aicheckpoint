@@ -220,8 +220,7 @@ def session_context() -> None:
         "the Git worktree, after verification and before the final response, call "
         "checkpoint_create_snapshot exactly once. Use the repository root as "
         "project_path and title it Auto:<concise one-sentence Chinese summary>. "
-        "Do not edit files after creating it. The Stop hook only audits and fills "
-        "missed snapshots."
+        "Do not edit files after creating it."
     )
     print(
         json.dumps(

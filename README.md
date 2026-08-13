@@ -24,9 +24,7 @@ checkpoint.exe C:\path\to\repository
 
 ## Codex 自动保存
 
-应用内可以安装附带的 Codex 插件。安装后，只要一轮对话修改了工作区，插件就会在该轮结束时自动创建一次快照
-。
-注意：stop 钩子是作为 AI 忘记创建 checkpoint 的提醒器，这个仅需要在AI经常忘记创建的时候开启
+应用内可以安装附带的 Codex 插件。安装后，插件会在会话开始时向模型提供自动保存规则；模型会在回复前主动创建一次快照，不再注册结束对话时的 Stop 钩子。
 
 安装后需要重启 Codex；自动保存期间需要保持 Checkpoint 运行。
 
@@ -44,6 +42,15 @@ http://127.0.0.1:47173/mcp
 - `checkpoint_get_latest_snapshot`：查询最新快照
 
 把这个地址配进任何支持 HTTP MCP 的客户端即可使用。
+
+## PI 自动保存扩展
+
+应用导出的插件目录还包含 `pi/checkpoint-autosave.ts`，用于 [PI 扩展](https://pi.dev/docs/latest/extensions)。
+把它复制到 `~/.pi/agent/extensions/checkpoint-autosave.ts`（或项目的 `.pi/extensions/`）后，PI 会在每次
+发送用户提示前把自动保存规则注入系统上下文。规则要求 AI 在完成改动和验证后、回复前自行调用
+`checkpoint_create_snapshot`，因此 PI 扩展本身不注册钩子、命令或工具，也不执行 Git 操作。
+
+PI 扩展只依赖 PI 提供的 TypeScript 运行时和 Node.js 内置模块；使用前请保持 Checkpoint 桌面程序运行。
 
 ## 注意
 

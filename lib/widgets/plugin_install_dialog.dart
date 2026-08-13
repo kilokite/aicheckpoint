@@ -47,6 +47,18 @@ class _PluginInstallDialogState extends State<PluginInstallDialog> {
     });
   }
 
+  Future<void> _installPi() async {
+    await _run(() async {
+      final result = await widget.service.installPi();
+      if (!mounted) return;
+      setState(() {
+        _status = 'PI 扩展已安装到 ${result.pluginDirectory.path}。重启 PI 或执行 /reload 后生效。';
+        _exportDirectory = null;
+        _installPrompt = null;
+      });
+    });
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() {
@@ -87,7 +99,7 @@ class _PluginInstallDialogState extends State<PluginInstallDialog> {
         children: [
           Icon(Icons.extension_outlined, size: 22),
           SizedBox(width: 10),
-          Text('安装 Codex 插件'),
+          Text('Coding Agent 插件'),
         ],
       ),
       content: SizedBox(
@@ -97,50 +109,32 @@ class _PluginInstallDialogState extends State<PluginInstallDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                '直接安装',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-              ),
+              const _SectionHeader('Codex'),
               const SizedBox(height: 5),
               const Text(
-                '复制插件到当前用户的 personal marketplace 并启用。不会覆盖其他插件配置。',
+                '复制插件到当前用户的 personal marketplace 并启用，不会覆盖其他配置。',
                 style: TextStyle(fontSize: 12, color: Color(0xFF666B64)),
               ),
               const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  key: const Key('install-plugin-direct'),
-                  onPressed: _busy ? null : _installDirect,
-                  icon: const Icon(Icons.install_desktop, size: 19),
-                  label: const Text('直接安装到 Codex'),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Divider(height: 1),
-              ),
-              const Text(
-                '让 Codex 安装',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                '把插件源码导出到应用数据目录，再生成一段带绝对路径的安装提示词。',
-                style: TextStyle(fontSize: 12, color: Color(0xFF666B64)),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  key: const Key('export-plugin-for-codex'),
-                  onPressed: _busy ? null : _export,
-                  icon: const Icon(Icons.folder_copy_outlined, size: 19),
-                  label: const Text('导出并生成提示词'),
-                ),
+              Row(
+                children: [
+                  FilledButton.icon(
+                    key: const Key('install-plugin-direct'),
+                    onPressed: _busy ? null : _installDirect,
+                    icon: const Icon(Icons.install_desktop, size: 19),
+                    label: const Text('直接安装到 Codex'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    key: const Key('export-plugin-for-codex'),
+                    onPressed: _busy ? null : _export,
+                    icon: const Icon(Icons.folder_copy_outlined, size: 18),
+                    label: const Text('导出源码并生成提示词'),
+                  ),
+                ],
               ),
               if (_installPrompt case final prompt?) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
                 Container(
                   constraints: const BoxConstraints(maxHeight: 150),
                   padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
@@ -178,6 +172,27 @@ class _PluginInstallDialogState extends State<PluginInstallDialog> {
                   ),
                 ),
               ],
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Divider(height: 1),
+              ),
+              const _SectionHeader('PI'),
+              const SizedBox(height: 5),
+              const Text(
+                '把扩展复制到 PI 的自动发现目录（~/.pi/agent/extensions），'
+                '重启或执行 /reload 后生效。',
+                style: TextStyle(fontSize: 12, color: Color(0xFF666B64)),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  key: const Key('install-pi-extension'),
+                  onPressed: _busy ? null : _installPi,
+                  icon: const Icon(Icons.auto_awesome_outlined, size: 19),
+                  label: const Text('安装 PI 扩展'),
+                ),
+              ),
               if (_busy) ...[
                 const SizedBox(height: 16),
                 const LinearProgressIndicator(minHeight: 2),
@@ -214,4 +229,16 @@ class _PluginInstallDialogState extends State<PluginInstallDialog> {
       ],
     );
   }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+  );
 }

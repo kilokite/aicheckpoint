@@ -80,7 +80,7 @@ class CheckpointSidebar extends StatelessWidget {
               child: TextButton.icon(
                 onPressed: onInstallPlugin,
                 icon: const Icon(Icons.extension_outlined, size: 18),
-                label: const Text('安装 Codex 插件'),
+                label: const Text('Coding Agent 插件'),
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFFD7DAD5),
                   alignment: Alignment.centerLeft,

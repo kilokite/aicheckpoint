@@ -110,6 +110,18 @@ void main() {
     expect(prompt, contains('personal marketplace'));
   });
 
+  test('export includes the PI extension asset', () async {
+    final result = await service.exportForCodex();
+    final extension = File(
+      p.join(result.pluginDirectory.path, 'pi', 'checkpoint-autosave.ts'),
+    );
+    expect(extension.existsSync(), isTrue);
+    expect(
+      await extension.readAsString(),
+      'asset:plugins/checkpoint-autosave/pi/checkpoint-autosave.ts\n',
+    );
+  });
+
   test('config helper appends missing plugin section', () {
     expect(
       enablePluginInConfig('[features]\nexample = true\n'),

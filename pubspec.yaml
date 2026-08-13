@@ -66,6 +66,7 @@ flutter:
     - plugins/checkpoint-autosave/scripts/checkpoint_after_edit.py
     - plugins/checkpoint-autosave/scripts/test_checkpoint_after_edit.py
     - plugins/checkpoint-autosave/skills/checkpoint-autosave/SKILL.md
+    - plugins/checkpoint-autosave/pi/checkpoint-autosave.ts
 
   # To add assets to your application, add an assets section, like this:
   # assets:
