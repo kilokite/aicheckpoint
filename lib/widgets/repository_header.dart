@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/snapshot.dart';
+import 'gc_status_indicator.dart';
 
 class RepositoryHeader extends StatelessWidget {
   const RepositoryHeader({
@@ -111,6 +112,7 @@ class RepositoryHeader extends StatelessWidget {
             icon: const Icon(Icons.cleaning_services_outlined),
           ),
         ),
+        GcStatusIndicator(status: repository.gcStatus),
         const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: busy ? null : onCreate,

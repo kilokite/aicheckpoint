@@ -1,3 +1,5 @@
+import 'gc_status.dart';
+
 class Snapshot {
   const Snapshot({
     required this.id,
@@ -75,6 +77,7 @@ class RepositoryInfo {
     required this.branch,
     required this.headHash,
     required this.changedFileCount,
+    this.gcStatus,
   });
 
   final String path;
@@ -83,5 +86,17 @@ class RepositoryInfo {
   final String headHash;
   final int changedFileCount;
 
+  /// 距离 Git 自动 GC 的距离，由界面层单独获取后合并，不随 inspectRepository 返回。
+  final GcStatus? gcStatus;
+
   bool get isDirty => changedFileCount > 0;
+
+  RepositoryInfo copyWith({GcStatus? gcStatus}) => RepositoryInfo(
+    path: path,
+    name: name,
+    branch: branch,
+    headHash: headHash,
+    changedFileCount: changedFileCount,
+    gcStatus: gcStatus,
+  );
 }

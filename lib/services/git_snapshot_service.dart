@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
+import '../models/gc_status.dart';
 import '../models/snapshot.dart';
 
 class GitSnapshotException implements Exception {
@@ -122,6 +123,42 @@ class GitSnapshotService {
     await _git(repositoryPath, ['gc', '--prune=now']);
   }
 
+  /// 读取仓库距离自动 GC 还有多远：松散对象 / pack 数量与阈值配置。
+  Future<GcStatus> inspectGarbageCollection(String repositoryPath) async {
+    final auto = await _git(
+      repositoryPath,
+      ['config', '--get', 'gc.auto'],
+      allowFailure: true,
+    );
+    final packLimit = await _git(
+      repositoryPath,
+      ['config', '--get', 'gc.autoPackLimit'],
+      allowFailure: true,
+    );
+    final counted = await _git(repositoryPath, ['count-objects', '-v']);
+    final autoThreshold = int.tryParse(auto.stdout.trim()) ?? 6700;
+    final autoPackLimit = int.tryParse(packLimit.stdout.trim()) ?? 50;
+
+    var loose = 0;
+    var packs = 0;
+    for (final line in counted.stdout.split('\n')) {
+      final trimmed = line.trim();
+      final colon = trimmed.indexOf(':');
+      if (colon <= 0) continue;
+      final key = trimmed.substring(0, colon);
+      final value = int.tryParse(trimmed.substring(colon + 1).trim()) ?? 0;
+      if (key == 'count') loose = value;
+      if (key == 'packs') packs = value;
+    }
+
+    return GcStatus(
+      looseObjectCount: loose,
+      packCount: packs,
+      autoThreshold: autoThreshold,
+      packLimit: autoPackLimit,
+    );
+  }
+
   Future<(int, int, int)> _diffStats(
     String root,
     String base,
@@ -146,6 +183,7 @@ class GitSnapshotService {
     String workingDirectory,
     List<String> arguments, {
     Map<String, String> extraEnvironment = const {},
+    bool allowFailure = false,
   }) async {
     ProcessResult result;
     try {
@@ -162,7 +200,7 @@ class GitSnapshotService {
 
     final stdout = result.stdout.toString();
     final stderr = result.stderr.toString().trim();
-    if (result.exitCode != 0) {
+    if (result.exitCode != 0 && !allowFailure) {
       final detail = stderr.isEmpty ? stdout.trim() : stderr;
       throw GitSnapshotException(detail.isEmpty ? 'Git 命令执行失败' : detail);
     }

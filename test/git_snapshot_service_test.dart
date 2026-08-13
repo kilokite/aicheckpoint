@@ -119,6 +119,54 @@ void main() {
 
     expect(await service.isSnapshotAvailable(snapshot), isFalse);
   });
+
+  test('inspects garbage collection distance with default thresholds',
+      () async {
+    final status = await service.inspectGarbageCollection(
+      temporaryDirectory.path,
+    );
+
+    // 未配置 gc.auto / gc.autoPackLimit 时使用 Git 默认值。
+    expect(status.autoThreshold, 6700);
+    expect(status.packLimit, 50);
+    expect(status.looseObjectCount, greaterThanOrEqualTo(0));
+    expect(status.packCount, greaterThanOrEqualTo(0));
+    expect(status.progress, inInclusiveRange(0.0, 1.0));
+    expect(status.remainingDescription, isNotEmpty);
+
+    // 创建快照会产生新的松散对象，GC 距离应随之缩短。
+    final repository = await service.inspectRepository(
+      temporaryDirectory.path,
+    );
+    final before = await service.inspectGarbageCollection(
+      temporaryDirectory.path,
+    );
+    await service.createSnapshot(repository, title: 'gc distance');
+    final after = await service.inspectGarbageCollection(
+      temporaryDirectory.path,
+    );
+    expect(after.looseObjectCount, greaterThanOrEqualTo(before.looseObjectCount));
+  });
+
+  test('inspects garbage collection with configured thresholds', () async {
+    await _git(temporaryDirectory.path, ['config', 'gc.auto', '0']);
+    final disabled = await service.inspectGarbageCollection(
+      temporaryDirectory.path,
+    );
+    expect(disabled.autoThreshold, 0);
+    expect(disabled.autoGcDisabled, isTrue);
+    expect(disabled.remainingDescription, contains('禁用'));
+
+    await _git(temporaryDirectory.path, ['config', 'gc.autoPackLimit', '1']);
+    // 显式 git gc 会把松散对象打包成一个 pack 文件，从而触及 packLimit。
+    await _git(temporaryDirectory.path, ['gc']);
+    final configured = await service.inspectGarbageCollection(
+      temporaryDirectory.path,
+    );
+    expect(configured.packLimit, 1);
+    expect(configured.packCount, greaterThanOrEqualTo(1));
+    expect(configured.exceeds, isTrue);
+  });
 }
 
 Future<String> _git(String directory, List<String> arguments) async {

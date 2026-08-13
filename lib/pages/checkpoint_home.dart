@@ -121,6 +121,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
           try {
             final repository = await _git.inspectRepository(initialPath);
             if (mounted) setState(() => _repository = repository);
+            await _refreshGcStatus();
           } on Object {
             // A GUI launch commonly inherits a non-repository working directory.
           }
@@ -147,6 +148,25 @@ class _CheckpointHomeState extends State<CheckpointHome> {
         _selectedId = null;
       });
     });
+    await _refreshGcStatus();
+  }
+
+  /// 刷新“距离 Git 自动 GC 还有多远”的指标，失败时不阻塞主流程。
+  Future<void> _refreshGcStatus() async {
+    final repository = _repository;
+    if (repository == null) return;
+    try {
+      final status = await _git.inspectGarbageCollection(repository.path);
+      if (mounted) {
+        setState(
+          () => _repository = repository.copyWith(gcStatus: status),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _repository = repository.copyWith(gcStatus: null));
+      }
+    }
   }
 
   Future<void> _refresh() async {
@@ -202,6 +222,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
       });
       _showMessage('快照已创建');
     });
+    await _refreshGcStatus();
   }
 
   Future<void> _restoreSnapshot(Snapshot snapshot) async {
@@ -433,6 +454,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
       if (unavailable.isNotEmpty) await _removeSnapshots(unavailable);
       _showMessage('Git GC 已完成，删除了 ${unavailable.length} 个失效快照记录');
     });
+    await _refreshGcStatus();
   }
 
   Future<void> _removeSnapshots(List<Snapshot> snapshots) async {
