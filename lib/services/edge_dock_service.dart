@@ -120,8 +120,10 @@ class EdgeDockService extends ChangeNotifier with WindowListener {
   void onWindowMinimize() {
     if (!_enabled || !Platform.isWindows) return;
     // 贴边模式下窗口不可最小化（任务栏已隐藏，最小化后无从找回），
-    // 拦截一切最小化行为（标题栏按钮、Win+D、Win+M、Alt+Space 等）并立即恢复。
-    unawaited(windowManager.restore());
+    // 拦截一切最小化行为（标题栏按钮、Win+D、Win+M、Alt+Space 等）。
+    // 注意：这里的 restore 是异步 PostMessage，可能被「显示桌面」的后续操作
+    // 覆盖，因此真正可靠的恢复由 _poll 里的 isMinimized 检测兜底。
+    unawaited(_recoverFromMinimize());
   }
 
   void _startPolling() {
@@ -135,7 +137,16 @@ class EdgeDockService extends ChangeNotifier with WindowListener {
   }
 
   Future<void> _poll() async {
-    if (!_enabled || _animating) return;
+    if (!_enabled) return;
+
+    // 贴边模式下窗口不可最小化：「显示桌面」/Win+D 等会把窗口最小化，
+    // 这里主动检测并恢复（不依赖事件时序，比 onWindowMinimize 更可靠）。
+    if (await windowManager.isMinimized()) {
+      await _recoverFromMinimize();
+      return;
+    }
+
+    if (_animating) return;
 
     // 显示器几何信息低频刷新；鼠标检测仍保持高频，保证贴边响应灵敏。
     final now = DateTime.now();
@@ -158,6 +169,27 @@ class EdgeDockService extends ChangeNotifier with WindowListener {
         cursor.dy <= _dockedBounds.bottom) {
       await _show();
     }
+  }
+
+  /// 从最小化状态恢复，并重新贴回屏幕边缘（隐藏）。
+  ///
+  /// 「显示桌面」会把窗口最小化，而贴边模式下任务栏图标已被隐藏，
+  /// 若不恢复窗口将彻底丢失。恢复后统一贴回边缘，避免窗口弹出挡住桌面。
+  Future<void> _recoverFromMinimize() async {
+    await windowManager.restore();
+    // restore 内部是异步 PostMessage，稍等片刻确保恢复完成。
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!_enabled) return;
+
+    // 恢复后先刷新几何信息，确保贴边位置基于最新工作区。
+    await _refreshGeometry();
+    if (!_enabled) return;
+
+    if (_visible) {
+      _visible = false;
+      notifyListeners();
+    }
+    await _animateTo(_dockedBounds);
   }
 
   /// 根据窗口当前所在显示器重新计算几何信息，

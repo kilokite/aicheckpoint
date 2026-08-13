@@ -95,7 +95,7 @@ void _ensureLoaded() {
   _monitorFromPoint = lib.lookupFunction<_MonitorFromPointC,
       _MonitorFromPointDart>('MonitorFromPoint');
   _getMonitorInfo = lib.lookupFunction<_GetMonitorInfoC, _GetMonitorInfoDart>(
-    'GetMonitorInfo',
+    'GetMonitorInfoA',
   );
 }
 
