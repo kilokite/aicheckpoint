@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/snapshot.dart';
+import 'snapshot_diff_page.dart';
 import '../services/git_snapshot_service.dart';
 import '../services/mcp_snapshot_server.dart';
 import '../services/plugin_install_service.dart';
+import '../services/snapshot_diff_service.dart';
 import '../services/snapshot_store.dart';
 import '../widgets/checkpoint_sidebar.dart';
 import '../widgets/plugin_install_dialog.dart';
@@ -33,6 +35,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   final _git = GitSnapshotService();
   final _store = SnapshotStore();
   final _pluginInstaller = PluginInstallService();
+  final _snapshotDiff = SnapshotDiffService();
 
   List<Snapshot> _allSnapshots = [];
   RepositoryInfo? _repository;
@@ -158,9 +161,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
     try {
       final status = await _git.inspectGarbageCollection(repository.path);
       if (mounted) {
-        setState(
-          () => _repository = repository.copyWith(gcStatus: status),
-        );
+        setState(() => _repository = repository.copyWith(gcStatus: status));
       }
     } catch (error) {
       if (mounted) {
@@ -353,6 +354,23 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   Future<void> _copyHash(Snapshot snapshot) async {
     await Clipboard.setData(ClipboardData(text: snapshot.commitHash));
     _showMessage('已复制快照哈希');
+  }
+
+  Future<void> _showSnapshotDiff(Snapshot snapshot) async {
+    final snapshots = _snapshots;
+    final index = snapshots.indexWhere((item) => item.id == snapshot.id);
+    final previous = index >= 0 && index + 1 < snapshots.length
+        ? snapshots[index + 1]
+        : null;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) => SnapshotDiffPage(
+          snapshot: snapshot,
+          previousSnapshot: previous,
+          service: _snapshotDiff,
+        ),
+      ),
+    );
   }
 
   Future<List<Snapshot>> _findUnavailableSnapshots() async {
@@ -557,6 +575,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
                           onRename: _renameSnapshot,
                           onDelete: _deleteSnapshot,
                           onCopyHash: _copyHash,
+                          onShowDiff: _showSnapshotDiff,
                         ),
                 ),
               ],

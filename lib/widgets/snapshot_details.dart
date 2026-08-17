@@ -11,6 +11,7 @@ class SnapshotDetailsPane extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.onCopyHash,
+    required this.onShowDiff,
   });
 
   final Snapshot? snapshot;
@@ -19,6 +20,7 @@ class SnapshotDetailsPane extends StatelessWidget {
   final ValueChanged<Snapshot> onRename;
   final ValueChanged<Snapshot> onDelete;
   final ValueChanged<Snapshot> onCopyHash;
+  final ValueChanged<Snapshot> onShowDiff;
 
   @override
   Widget build(BuildContext context) {
@@ -127,6 +129,15 @@ class SnapshotDetailsPane extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : () => onShowDiff(item),
+                  icon: const Icon(Icons.difference_outlined, size: 19),
+                  label: const Text('查看 Diff'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 FilledButton.icon(
                   onPressed: busy ? null : () => onRestore(item),
                   icon: const Icon(Icons.history, size: 19),

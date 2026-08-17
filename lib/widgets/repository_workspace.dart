@@ -21,6 +21,7 @@ class RepositoryWorkspace extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.onCopyHash,
+    required this.onShowDiff,
   });
 
   final RepositoryInfo repository;
@@ -36,6 +37,7 @@ class RepositoryWorkspace extends StatelessWidget {
   final ValueChanged<Snapshot> onRename;
   final ValueChanged<Snapshot> onDelete;
   final ValueChanged<Snapshot> onCopyHash;
+  final ValueChanged<Snapshot> onShowDiff;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -60,6 +62,7 @@ class RepositoryWorkspace extends StatelessWidget {
                   selectedId: selectedSnapshot?.id,
                   busy: busy,
                   onSelected: onSelected,
+                  onShowDiff: onShowDiff,
                   onRestore: onRestore,
                   onCreate: onCreate,
                 ),
@@ -74,6 +77,7 @@ class RepositoryWorkspace extends StatelessWidget {
                     onRename: onRename,
                     onDelete: onDelete,
                     onCopyHash: onCopyHash,
+                    onShowDiff: onShowDiff,
                   ),
                 ),
             ],

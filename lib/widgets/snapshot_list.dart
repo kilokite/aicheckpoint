@@ -9,6 +9,7 @@ class SnapshotListPane extends StatelessWidget {
     required this.selectedId,
     required this.busy,
     required this.onSelected,
+    required this.onShowDiff,
     required this.onRestore,
     required this.onCreate,
   });
@@ -17,6 +18,7 @@ class SnapshotListPane extends StatelessWidget {
   final String? selectedId;
   final bool busy;
   final ValueChanged<Snapshot> onSelected;
+  final ValueChanged<Snapshot> onShowDiff;
   final ValueChanged<Snapshot> onRestore;
   final VoidCallback onCreate;
 
@@ -39,6 +41,7 @@ class SnapshotListPane extends StatelessWidget {
                 selected: snapshot.id == selectedId,
                 busy: busy,
                 onTap: () => onSelected(snapshot),
+                onShowDiff: () => onShowDiff(snapshot),
                 onRestore: () => onRestore(snapshot),
               );
             },
@@ -55,6 +58,7 @@ class _SnapshotRow extends StatelessWidget {
     required this.selected,
     required this.busy,
     required this.onTap,
+    required this.onShowDiff,
     required this.onRestore,
   });
 
@@ -62,6 +66,7 @@ class _SnapshotRow extends StatelessWidget {
   final bool selected;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback onShowDiff;
   final VoidCallback onRestore;
 
   @override
@@ -102,7 +107,7 @@ class _SnapshotRow extends StatelessWidget {
         ),
       ),
       trailing: SizedBox(
-        width: 138,
+        width: 176,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -116,6 +121,12 @@ class _SnapshotRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
+            IconButton(
+              onPressed: busy ? null : onShowDiff,
+              tooltip: '查看 Diff',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.difference_outlined, size: 19),
+            ),
             IconButton(
               onPressed: busy ? null : onRestore,
               tooltip: '恢复快照',
