@@ -1,10 +1,13 @@
 import 'package:checkpoint/main.dart';
 import 'package:checkpoint/models/snapshot.dart';
 import 'package:checkpoint/models/snapshot_diff.dart';
+import 'package:checkpoint/models/receipt_printer_settings.dart';
 import 'package:checkpoint/pages/snapshot_diff_page.dart';
 import 'package:checkpoint/services/snapshot_diff_service.dart';
 import 'package:checkpoint/widgets/snapshot_details.dart';
 import 'package:checkpoint/widgets/snapshot_list.dart';
+import 'package:checkpoint/widgets/snapshot_title_dialog.dart';
+import 'package:checkpoint/widgets/receipt_printer_settings_dialog.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +28,86 @@ void main() {
     expect(find.byKey(const Key('install-plugin-direct')), findsOneWidget);
     expect(find.byKey(const Key('export-plugin-for-codex')), findsOneWidget);
     expect(find.byKey(const Key('install-pi-extension')), findsOneWidget);
+  });
+
+  testWidgets('receipt printer settings edit the switch and webhook', (
+    tester,
+  ) async {
+    ReceiptPrinterSettings? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              result = await showDialog<ReceiptPrinterSettings>(
+                context: context,
+                builder: (_) => const ReceiptPrinterSettingsDialog(
+                  initialSettings: ReceiptPrinterSettings(),
+                ),
+              );
+            },
+            child: const Text('打开设置'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('小票机设置'), findsOneWidget);
+    final urlField = tester.widget<TextField>(
+      find.byKey(const Key('receipt-webhook-url')),
+    );
+    expect(urlField.controller?.text, ReceiptPrinterSettings.defaultWebhookUrl);
+
+    await tester.tap(find.byType(Switch));
+    await tester.enterText(
+      find.byKey(const Key('receipt-webhook-url')),
+      'http://192.168.1.8:9101/print',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(result?.enabled, isTrue);
+    expect(result?.webhookUrl, 'http://192.168.1.8:9101/print');
+  });
+
+  testWidgets('snapshot title controller survives the dialog exit animation', (
+    tester,
+  ) async {
+    String? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async {
+              result = await showDialog<String>(
+                context: context,
+                builder: (_) => const SnapshotTitleDialog(
+                  title: '创建快照',
+                  fieldLabel: '名称（可选）',
+                  confirmLabel: '创建',
+                ),
+              );
+            },
+            child: const Text('创建快照'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('创建快照'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('snapshot-title-field')),
+      '修复弹窗生命周期',
+    );
+    await tester.tap(find.text('创建'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(result, '修复弹窗生命周期');
   });
 
   testWidgets('snapshot details exposes the Diff preview action', (

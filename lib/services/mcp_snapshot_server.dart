@@ -7,12 +7,14 @@ import 'git_snapshot_service.dart';
 import 'snapshot_store.dart';
 
 typedef SnapshotsChanged = FutureOr<void> Function(List<Snapshot> snapshots);
+typedef SnapshotCreated = FutureOr<void> Function(Snapshot snapshot);
 
 class McpSnapshotServer {
   McpSnapshotServer({
     required GitSnapshotService git,
     required SnapshotStore store,
     this.onSnapshotsChanged,
+    this.onSnapshotCreated,
     this.listenPort = port,
   }) : _git = git,
        _store = store;
@@ -24,6 +26,7 @@ class McpSnapshotServer {
   final GitSnapshotService _git;
   final SnapshotStore _store;
   final SnapshotsChanged? onSnapshotsChanged;
+  final SnapshotCreated? onSnapshotCreated;
   final int listenPort;
 
   String get serverUrl => 'http://127.0.0.1:$listenPort$endpoint';
@@ -96,6 +99,17 @@ class McpSnapshotServer {
           );
           final snapshots = await _store.add(snapshot);
           await onSnapshotsChanged?.call(snapshots);
+          final snapshotCreated = onSnapshotCreated;
+          if (snapshotCreated != null) {
+            unawaited(
+              Future<void>.sync(() async {
+                await snapshotCreated(snapshot);
+              }).catchError((_) {
+                // Optional integrations must never turn a saved snapshot into
+                // an MCP error response.
+              }),
+            );
+          }
           return CallToolResult(
             content: [
               TextContent(

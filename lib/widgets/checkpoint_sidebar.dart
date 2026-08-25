@@ -14,6 +14,7 @@ class CheckpointSidebar extends StatelessWidget {
     required this.onOpen,
     required this.onSelectRecent,
     required this.onInstallPlugin,
+    required this.onOpenSettings,
     required this.onCopyMcpUrl,
   });
 
@@ -25,6 +26,7 @@ class CheckpointSidebar extends StatelessWidget {
   final VoidCallback onOpen;
   final ValueChanged<String> onSelectRecent;
   final VoidCallback onInstallPlugin;
+  final VoidCallback onOpenSettings;
   final VoidCallback onCopyMcpUrl;
 
   @override
@@ -75,6 +77,22 @@ class CheckpointSidebar extends StatelessWidget {
                   ),
             ],
             const Spacer(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: TextButton.icon(
+                onPressed: onOpenSettings,
+                icon: const Icon(Icons.settings_outlined, size: 18),
+                label: const Text('设置'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFD7DAD5),
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 13,
+                  ),
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
               child: TextButton.icon(

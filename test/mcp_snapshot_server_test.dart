@@ -14,6 +14,7 @@ void main() {
   late SnapshotStore store;
   late HttpClient client;
   late String serverUrl;
+  String? createdSnapshotTitle;
 
   Future<String> runGit(List<String> arguments) async {
     final result = await Process.run(
@@ -72,6 +73,9 @@ void main() {
       git: GitSnapshotService(),
       store: store,
       listenPort: testPort,
+      onSnapshotCreated: (snapshot) {
+        createdSnapshotTitle = snapshot.title;
+      },
     );
     serverUrl = server.serverUrl;
     client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
@@ -156,6 +160,7 @@ void main() {
       final snapshots = await store.load();
       expect(snapshots, hasLength(1));
       expect(snapshots.single.title, '模型创建');
+      expect(createdSnapshotTitle, '模型创建');
 
       final latestResponse = await postMcp({
         'jsonrpc': '2.0',

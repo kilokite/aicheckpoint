@@ -4,15 +4,20 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/snapshot.dart';
+import '../models/receipt_printer_settings.dart';
 import 'snapshot_diff_page.dart';
 import '../services/git_snapshot_service.dart';
 import '../services/mcp_snapshot_server.dart';
 import '../services/plugin_install_service.dart';
+import '../services/receipt_printer_service.dart';
+import '../services/receipt_printer_settings_store.dart';
 import '../services/snapshot_diff_service.dart';
 import '../services/snapshot_store.dart';
 import '../widgets/checkpoint_sidebar.dart';
 import '../widgets/plugin_install_dialog.dart';
+import '../widgets/receipt_printer_settings_dialog.dart';
 import '../widgets/repository_workspace.dart';
+import '../widgets/snapshot_title_dialog.dart';
 import '../widgets/window_title_bar.dart';
 
 class CheckpointHome extends StatefulWidget {
@@ -36,6 +41,8 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   final _store = SnapshotStore();
   final _pluginInstaller = PluginInstallService();
   final _snapshotDiff = SnapshotDiffService();
+  final _printerSettingsStore = ReceiptPrinterSettingsStore();
+  final _receiptPrinter = ReceiptPrinterService();
 
   List<Snapshot> _allSnapshots = [];
   RepositoryInfo? _repository;
@@ -45,6 +52,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   McpSnapshotServer? _mcpServer;
   bool _mcpOnline = false;
   String? _mcpError;
+  ReceiptPrinterSettings _printerSettings = const ReceiptPrinterSettings();
 
   List<Snapshot> get _snapshots {
     final repository = _repository;
@@ -82,7 +90,6 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   void initState() {
     super.initState();
     _initialize();
-    if (widget.enableMcp) _startMcpServer();
   }
 
   Future<void> _startMcpServer() async {
@@ -92,6 +99,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
       onSnapshotsChanged: (snapshots) {
         if (mounted) setState(() => _allSnapshots = snapshots);
       },
+      onSnapshotCreated: _printSnapshotIfEnabled,
     );
     _mcpServer = server;
     try {
@@ -110,14 +118,24 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   @override
   void dispose() {
     _mcpServer?.close();
+    _receiptPrinter.close();
     super.dispose();
   }
 
   Future<void> _initialize() async {
     try {
-      final snapshots = await _store.load();
+      final results = await Future.wait([
+        _store.load(),
+        _printerSettingsStore.load(),
+      ]);
+      final snapshots = results[0] as List<Snapshot>;
+      final printerSettings = results[1] as ReceiptPrinterSettings;
       if (!mounted) return;
-      setState(() => _allSnapshots = snapshots);
+      setState(() {
+        _allSnapshots = snapshots;
+        _printerSettings = printerSettings;
+      });
+      if (widget.enableMcp) await _startMcpServer();
       final initialPath = widget.initialPath;
       if (initialPath != null && initialPath.trim().isNotEmpty) {
         if (widget.silentInitialFailure) {
@@ -178,37 +196,15 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   Future<void> _createSnapshot() async {
     final repository = _repository;
     if (repository == null || _busy) return;
-    final controller = TextEditingController();
     final title = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('创建快照'),
-        content: SizedBox(
-          width: 420,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 80,
-            decoration: const InputDecoration(
-              labelText: '名称（可选）',
-              hintText: '例如：重构解析器之前',
-            ),
-            onSubmitted: (value) => Navigator.pop(context, value),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('创建'),
-          ),
-        ],
+      builder: (context) => const SnapshotTitleDialog(
+        title: '创建快照',
+        fieldLabel: '名称（可选）',
+        hintText: '例如：重构解析器之前',
+        confirmLabel: '创建',
       ),
     );
-    controller.dispose();
     if (title == null) return;
 
     await _runBusy(() async {
@@ -222,6 +218,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
         _selectedId = snapshot.id;
       });
       _showMessage('快照已创建');
+      await _printSnapshotIfEnabled(snapshot);
     });
     await _refreshGcStatus();
   }
@@ -290,34 +287,16 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   }
 
   Future<void> _renameSnapshot(Snapshot snapshot) async {
-    final controller = TextEditingController(text: snapshot.title);
     final title = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('重命名快照'),
-        content: SizedBox(
-          width: 420,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 80,
-            decoration: const InputDecoration(labelText: '名称'),
-            onSubmitted: (value) => Navigator.pop(context, value.trim()),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('保存'),
-          ),
-        ],
+      builder: (context) => SnapshotTitleDialog(
+        title: '重命名快照',
+        fieldLabel: '名称',
+        confirmLabel: '保存',
+        initialValue: snapshot.title,
+        allowEmpty: false,
       ),
     );
-    controller.dispose();
     if (title == null || title.isEmpty || title == snapshot.title) return;
 
     final snapshots = await _store.rename(snapshot.id, title);
@@ -528,6 +507,34 @@ class _CheckpointHomeState extends State<CheckpointHome> {
     builder: (context) => PluginInstallDialog(service: _pluginInstaller),
   );
 
+  Future<void> _showPrinterSettings() async {
+    final settings = await showDialog<ReceiptPrinterSettings>(
+      context: context,
+      builder: (context) =>
+          ReceiptPrinterSettingsDialog(initialSettings: _printerSettings),
+    );
+    if (settings == null) return;
+    try {
+      await _printerSettingsStore.save(settings);
+      if (!mounted) return;
+      setState(() => _printerSettings = settings);
+      _showMessage(settings.enabled ? '小票打印已开启' : '小票打印已关闭');
+    } catch (error) {
+      _setError(error);
+    }
+  }
+
+  Future<void> _printSnapshotIfEnabled(Snapshot snapshot) async {
+    final settings = _printerSettings;
+    if (!settings.enabled) return;
+    try {
+      await _receiptPrinter.printSnapshot(snapshot, settings.webhookUrl);
+      _showMessage('快照小票已加入打印队列');
+    } catch (error) {
+      _showMessage(error.toString(), error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -546,6 +553,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
                   onOpen: _pickRepository,
                   onSelectRecent: _openRepository,
                   onInstallPlugin: _showPluginInstaller,
+                  onOpenSettings: _showPrinterSettings,
                   onCopyMcpUrl: () async {
                     await Clipboard.setData(
                       const ClipboardData(text: McpSnapshotServer.url),

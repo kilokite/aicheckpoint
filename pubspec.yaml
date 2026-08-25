@@ -61,6 +61,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/checkpoint_receipt_logo.png
     - plugins/checkpoint-autosave/.codex-plugin/plugin.json
     - plugins/checkpoint-autosave/.mcp.json
     - plugins/checkpoint-autosave/hooks/hooks.json
