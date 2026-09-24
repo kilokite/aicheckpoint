@@ -218,7 +218,7 @@ class _SnapshotDiffPageState extends State<SnapshotDiffPage> {
                 ),
                 ButtonSegment(
                   value: SnapshotDiffMode.previousSnapshot,
-                  label: const Text('上一个检查点'),
+                  label: const Text('来源 / 上一个检查点'),
                   icon: const Icon(Icons.bookmarks_outlined, size: 16),
                   enabled: widget.previousSnapshot != null,
                 ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/snapshot.dart';
+import '../models/snapshot_timeline.dart';
 import 'repository_header.dart';
 import 'snapshot_details.dart';
 import 'snapshot_list.dart';
@@ -10,6 +11,7 @@ class RepositoryWorkspace extends StatelessWidget {
     super.key,
     required this.repository,
     required this.snapshots,
+    this.timeline = const SnapshotTimeline(),
     required this.selectedSnapshot,
     required this.busy,
     required this.onRefresh,
@@ -26,6 +28,7 @@ class RepositoryWorkspace extends StatelessWidget {
 
   final RepositoryInfo repository;
   final List<Snapshot> snapshots;
+  final SnapshotTimeline timeline;
   final Snapshot? selectedSnapshot;
   final bool busy;
   final VoidCallback onRefresh;
@@ -59,6 +62,8 @@ class RepositoryWorkspace extends StatelessWidget {
               Expanded(
                 child: SnapshotListPane(
                   snapshots: snapshots,
+                  timeline: timeline,
+                  repositoryPath: repository.path,
                   selectedId: selectedSnapshot?.id,
                   busy: busy,
                   onSelected: onSelected,

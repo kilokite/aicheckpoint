@@ -13,6 +13,8 @@ class Snapshot {
     required this.fileCount,
     required this.insertions,
     required this.deletions,
+    this.parentId,
+    this.fromRestore = false,
   });
 
   final String id;
@@ -26,6 +28,8 @@ class Snapshot {
   final int fileCount;
   final int insertions;
   final int deletions;
+  final String? parentId;
+  final bool fromRestore;
 
   Snapshot copyWith({String? title}) => Snapshot(
     id: id,
@@ -39,6 +43,24 @@ class Snapshot {
     fileCount: fileCount,
     insertions: insertions,
     deletions: deletions,
+    parentId: parentId,
+    fromRestore: fromRestore,
+  );
+
+  Snapshot withParent(String? id, {required bool fromRestore}) => Snapshot(
+    id: this.id,
+    repositoryPath: repositoryPath,
+    commitHash: commitHash,
+    indexTreeHash: indexTreeHash,
+    baseHash: baseHash,
+    branch: branch,
+    title: title,
+    createdAt: createdAt,
+    fileCount: fileCount,
+    insertions: insertions,
+    deletions: deletions,
+    parentId: id,
+    fromRestore: fromRestore,
   );
 
   factory Snapshot.fromJson(Map<String, dynamic> json) => Snapshot(
@@ -53,6 +75,8 @@ class Snapshot {
     fileCount: json['fileCount'] as int? ?? 0,
     insertions: json['insertions'] as int? ?? 0,
     deletions: json['deletions'] as int? ?? 0,
+    parentId: json['parentId'] as String?,
+    fromRestore: json['fromRestore'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {
@@ -67,6 +91,8 @@ class Snapshot {
     'fileCount': fileCount,
     'insertions': insertions,
     'deletions': deletions,
+    'parentId': parentId,
+    'fromRestore': fromRestore,
   };
 }
 

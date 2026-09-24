@@ -1,5 +1,6 @@
 import 'package:checkpoint/main.dart';
 import 'package:checkpoint/models/snapshot.dart';
+import 'package:checkpoint/models/snapshot_timeline.dart';
 import 'package:checkpoint/models/snapshot_diff.dart';
 import 'package:checkpoint/models/receipt_printer_settings.dart';
 import 'package:checkpoint/pages/snapshot_diff_page.dart';
@@ -178,6 +179,99 @@ void main() {
 
     await tester.tap(find.byTooltip('查看 Diff'));
     expect(requested, same(snapshot));
+  });
+
+  testWidgets(
+    'trajectory distinguishes pointer, skipped snapshots and selection',
+    (tester) async {
+      final first = _snapshot(id: 'A', title: '起点');
+      final second = _snapshot(id: 'B', title: '旧分支一');
+      final third = _snapshot(id: 'C', title: '旧分支二');
+      final branch = _snapshot(
+        id: 'D',
+        title: '新分支',
+      ).withParent('A', fromRestore: true);
+      Snapshot? selected;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 760,
+              height: 500,
+              child: SnapshotListPane(
+                snapshots: [branch, third, second, first],
+                timeline: const SnapshotTimeline(
+                  pointers: {'c:/repo': 'D'},
+                  lastRestores: {
+                    'c:/repo': RestoreMove(fromId: 'C', toId: 'A'),
+                  },
+                ),
+                selectedId: null,
+                busy: false,
+                onSelected: (value) => selected = value,
+                onShowDiff: (_) {},
+                onRestore: (_) {},
+                onCreate: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('指针'), findsOneWidget);
+      expect(find.text('已跳过'), findsNWidgets(2));
+      await tester.tap(find.text('旧分支一'));
+      expect(selected, same(second));
+      expect(find.text('指针'), findsOneWidget);
+    },
+  );
+
+  testWidgets('trajectory lanes stay separate and divider resizes their area', (
+    tester,
+  ) async {
+    final snapshots = [
+      _snapshot(id: 'F', title: 'F').withParent('C', fromRestore: true),
+      _snapshot(id: 'E', title: 'E').withParent('B', fromRestore: true),
+      _snapshot(id: 'D', title: 'D').withParent('A', fromRestore: true),
+      _snapshot(id: 'C', title: 'C'),
+      _snapshot(id: 'B', title: 'B'),
+      _snapshot(id: 'A', title: 'A'),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 760,
+            height: 600,
+            child: SnapshotListPane(
+              snapshots: snapshots,
+              timeline: const SnapshotTimeline(
+                pointers: {'c:/repo': 'F'},
+                lastRestores: {'c:/repo': RestoreMove(fromId: 'C', toId: 'A')},
+              ),
+              selectedId: null,
+              busy: false,
+              onSelected: (_) {},
+              onShowDiff: (_) {},
+              onRestore: (_) {},
+              onCreate: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final area = find.byKey(const Key('trajectory-area')).first;
+    final originalWidth = tester.getSize(area).width;
+    expect(originalWidth, greaterThanOrEqualTo(130));
+    expect(find.textContaining('最近恢复'), findsNothing);
+    await tester.drag(
+      find.byKey(const Key('trajectory-divider')),
+      const Offset(80, 0),
+    );
+    await tester.pump();
+    expect(tester.getSize(area).width, greaterThan(originalWidth + 50));
   });
 
   testWidgets(

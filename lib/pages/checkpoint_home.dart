@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/snapshot.dart';
+import '../models/snapshot_timeline.dart';
 import '../models/receipt_printer_settings.dart';
 import 'snapshot_diff_page.dart';
 import '../services/git_snapshot_service.dart';
@@ -45,6 +46,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   final _receiptPrinter = ReceiptPrinterService();
 
   List<Snapshot> _allSnapshots = [];
+  SnapshotTimeline _timeline = const SnapshotTimeline();
   RepositoryInfo? _repository;
   String? _selectedId;
   bool _busy = false;
@@ -97,7 +99,14 @@ class _CheckpointHomeState extends State<CheckpointHome> {
       git: _git,
       store: _store,
       onSnapshotsChanged: (snapshots) {
-        if (mounted) setState(() => _allSnapshots = snapshots);
+        return _store.loadTimeline().then((timeline) {
+          if (mounted) {
+            setState(() {
+              _allSnapshots = snapshots;
+              _timeline = timeline;
+            });
+          }
+        });
       },
       onSnapshotCreated: _printSnapshotIfEnabled,
     );
@@ -130,9 +139,11 @@ class _CheckpointHomeState extends State<CheckpointHome> {
       ]);
       final snapshots = results[0] as List<Snapshot>;
       final printerSettings = results[1] as ReceiptPrinterSettings;
+      final timeline = await _store.loadTimeline();
       if (!mounted) return;
       setState(() {
         _allSnapshots = snapshots;
+        _timeline = timeline;
         _printerSettings = printerSettings;
       });
       if (widget.enableMcp) await _startMcpServer();
@@ -168,6 +179,14 @@ class _CheckpointHomeState extends State<CheckpointHome> {
         _repository = repository;
         _selectedId = null;
       });
+      final snapshots = await _store.load();
+      final timeline = await _store.loadTimeline();
+      if (mounted) {
+        setState(() {
+          _allSnapshots = snapshots;
+          _timeline = timeline;
+        });
+      }
     });
     await _refreshGcStatus();
   }
@@ -211,9 +230,11 @@ class _CheckpointHomeState extends State<CheckpointHome> {
       final freshRepository = await _git.inspectRepository(repository.path);
       final snapshot = await _git.createSnapshot(freshRepository, title: title);
       final snapshots = await _store.add(snapshot);
+      final timeline = await _store.loadTimeline();
       if (!mounted) return;
       setState(() {
         _allSnapshots = snapshots;
+        _timeline = timeline;
         _repository = freshRepository;
         _selectedId = snapshot.id;
       });
@@ -279,9 +300,14 @@ class _CheckpointHomeState extends State<CheckpointHome> {
 
     await _runBusy(() async {
       await _git.restoreSnapshot(snapshot);
+      await _store.recordRestore(snapshot.id);
+      final timeline = await _store.loadTimeline();
       final repository = await _git.inspectRepository(snapshot.repositoryPath);
       if (!mounted) return;
-      setState(() => _repository = repository);
+      setState(() {
+        _repository = repository;
+        _timeline = timeline;
+      });
       _showMessage('已还原到“${snapshot.title}”');
     });
   }
@@ -323,9 +349,11 @@ class _CheckpointHomeState extends State<CheckpointHome> {
     );
     if (confirmed != true) return;
     final snapshots = await _store.remove(snapshot.id);
+    final timeline = await _store.loadTimeline();
     if (!mounted) return;
     setState(() {
       _allSnapshots = snapshots;
+      _timeline = timeline;
       _selectedId = null;
     });
   }
@@ -338,9 +366,14 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   Future<void> _showSnapshotDiff(Snapshot snapshot) async {
     final snapshots = _snapshots;
     final index = snapshots.indexWhere((item) => item.id == snapshot.id);
-    final previous = index >= 0 && index + 1 < snapshots.length
-        ? snapshots[index + 1]
-        : null;
+    final parent = snapshots
+        .where((item) => item.id == snapshot.parentId)
+        .firstOrNull;
+    final previous =
+        parent ??
+        (index >= 0 && index + 1 < snapshots.length
+            ? snapshots[index + 1]
+            : null);
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (context) => SnapshotDiffPage(
@@ -457,9 +490,11 @@ class _CheckpointHomeState extends State<CheckpointHome> {
   Future<void> _removeSnapshots(List<Snapshot> snapshots) async {
     final removedIds = snapshots.map((item) => item.id).toSet();
     final remaining = await _store.removeMany(removedIds);
+    final timeline = await _store.loadTimeline();
     if (!mounted) return;
     setState(() {
       _allSnapshots = remaining;
+      _timeline = timeline;
       if (removedIds.contains(_selectedId)) _selectedId = null;
     });
   }
@@ -571,6 +606,7 @@ class _CheckpointHomeState extends State<CheckpointHome> {
                       : RepositoryWorkspace(
                           repository: _repository!,
                           snapshots: _snapshots,
+                          timeline: _timeline,
                           selectedSnapshot: _selectedSnapshot,
                           busy: _busy,
                           onRefresh: _refresh,
