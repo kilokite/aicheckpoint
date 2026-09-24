@@ -274,6 +274,55 @@ void main() {
     expect(tester.getSize(area).width, greaterThan(originalWidth + 50));
   });
 
+  testWidgets('snapshot rows retain distinct hash-colored dots', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 760,
+            height: 200,
+            child: SnapshotListPane(
+              snapshots: [
+                _snapshot(id: 'red', title: '红色', baseHash: '00000000'),
+                _snapshot(id: 'green', title: '绿色', baseHash: '00000078'),
+              ],
+              selectedId: null,
+              busy: false,
+              onSelected: (_) {},
+              onShowDiff: (_) {},
+              onRestore: (_) {},
+              onCreate: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final redDot = find.byKey(const Key('snapshot-color-red'));
+    final greenDot = find.byKey(const Key('snapshot-color-green'));
+    final redDecoration =
+        tester.widget<Container>(redDot).decoration! as BoxDecoration;
+    final greenDecoration =
+        tester.widget<Container>(greenDot).decoration! as BoxDecoration;
+    expect(tester.getSize(redDot), const Size(14, 14));
+    expect(redDecoration.shape, BoxShape.circle);
+    expect(
+      redDecoration.color,
+      const HSLColor.fromAHSL(1, 0, 0.58, 0.46).toColor(),
+    );
+    expect(
+      greenDecoration.color,
+      const HSLColor.fromAHSL(1, 120, 0.58, 0.46).toColor(),
+    );
+    expect(
+      tester.getCenter(redDot).dx,
+      lessThan(tester.getTopLeft(find.text('红色')).dx),
+    );
+    expect(find.byKey(const Key('trajectory-area')), findsNWidgets(2));
+  });
+
   testWidgets(
     'Diff page defaults to previous snapshot with a compact toolbar',
     (tester) async {
@@ -361,12 +410,16 @@ void main() {
   });
 }
 
-Snapshot _snapshot({required String id, required String title}) => Snapshot(
+Snapshot _snapshot({
+  required String id,
+  required String title,
+  String? baseHash,
+}) => Snapshot(
   id: id,
   repositoryPath: r'C:\repo',
   commitHash: 'a' * 40,
   indexTreeHash: 'b' * 40,
-  baseHash: 'c' * 40,
+  baseHash: baseHash ?? 'c' * 40,
   branch: 'main',
   title: title,
   createdAt: DateTime(2026, 8, 17, 12),

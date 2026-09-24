@@ -358,6 +358,15 @@ class _SnapshotRow extends StatelessWidget {
       selectedTileColor: const Color(0xFFE8F3ED),
       contentPadding: const EdgeInsets.only(left: 6, right: 18),
       minTileHeight: 84,
+      leading: Container(
+        key: Key('snapshot-color-${snapshot.id}'),
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(
+          color: _colorFromHash(snapshot.baseHash),
+          shape: BoxShape.circle,
+        ),
+      ),
       title: Row(
         children: [
           Flexible(
@@ -463,6 +472,12 @@ class _EmptySnapshots extends StatelessWidget {
       ],
     ),
   );
+}
+
+Color _colorFromHash(String hash) {
+  final prefixLength = hash.length < 8 ? hash.length : 8;
+  final seed = int.tryParse(hash.substring(0, prefixLength), radix: 16) ?? 0;
+  return HSLColor.fromAHSL(1, (seed % 360).toDouble(), 0.58, 0.46).toColor();
 }
 
 String _formatDate(DateTime value) {
